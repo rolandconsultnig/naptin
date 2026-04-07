@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise HRMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="loginScreen" class="min-h-screen flex items-center justify-center">
+            <div class="bg-white p-8 rounded-lg shadow-md w-96">
+                <h1 class="text-2xl font-bold text-center mb-6 text-blue-600">Enterprise HRMS</h1>
+                <form id="loginForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Email or Username</label>
+                        <input type="text" id="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Enter your email or username">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" id="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        Login
+                    </button>
+                </form>
+                <div class="mt-4 text-center">
+                    <button id="showRegister" class="text-blue-600 hover:text-blue-800">Create Account</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Screen -->
+        <div id="registerScreen" class="min-h-screen flex items-center justify-center hidden">
+            <div class="bg-white p-8 rounded-lg shadow-md w-96">
+                <h1 class="text-2xl font-bold text-center mb-6 text-blue-600">Create Account</h1>
+                <form id="registerForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Username</label>
+                        <input type="text" id="regUsername" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="regEmail" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" id="regPassword" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Role</label>
+                        <select id="regRole" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            <option value="Employee">Employee</option>
+                            <option value="Manager">Manager</option>
+                            <option value="HR Manager">HR Manager</option>
+                            <option value="Admin">Admin</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                        Register
+                    </button>
+                </form>
+                <div class="mt-4 text-center">
+                    <button id="showLogin" class="text-blue-600 hover:text-blue-800">Back to Login</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard" class="min-h-screen hidden">
+            <!-- Navigation -->
+            <nav class="bg-white shadow-lg border-b border-gray-200">
+                <div class="max-w-7xl mx-auto px-6">
+                    <div class="flex justify-between h-16">
+                        <div class="flex items-center">
+                            <h1 class="text-xl font-bold text-purple-600 flex items-center">
+                                <i class="fas fa-users-cog mr-2"></i>
+                                Enterprise HRMS
+                            </h1>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <span id="userInfo" class="text-gray-700"></span>
+                            <button id="logoutBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Logout</button>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Sidebar and Content -->
+            <div class="flex">
+                <!-- Sidebar -->
+                <div class="w-64 bg-white shadow-lg min-h-screen">
+                    <div class="p-6">
+                                                <nav class="space-y-2">
+                            <button class="nav-btn active w-full text-left px-4 py-2 bg-blue-600 text-white rounded-md" data-section="dashboard">
+                                <i class="fas fa-tachometer-alt mr-3"></i>Dashboard
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="employees">
+                                <i class="fas fa-users mr-3"></i>Employees
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="departments">
+                                <i class="fas fa-building mr-3"></i>Departments
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="recruitment">
+                                <i class="fas fa-user-plus mr-3"></i>Recruitment
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="attendance">
+                                <i class="fas fa-clock mr-3"></i>Attendance
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="leave">
+                                <i class="fas fa-calendar-alt mr-3"></i>Leave
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="payroll">
+                                <i class="fas fa-money-bill-wave mr-3"></i>Payroll
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="performance">
+                                <i class="fas fa-chart-line mr-3"></i>Performance
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="learning">
+                                <i class="fas fa-graduation-cap mr-3"></i>Learning
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="benefits">
+                                <i class="fas fa-heart mr-3"></i>Benefits
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="analytics">
+                                <i class="fas fa-chart-bar mr-3"></i>Analytics
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="experience">
+                                <i class="fas fa-smile mr-3"></i>Employee Experience
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="compliance">
+                                <i class="fas fa-shield-alt mr-3"></i>Compliance & Risk
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="mobile">
+                                <i class="fas fa-mobile-alt mr-3"></i>Mobile & Self-Service
+                            </button>
+                            <button class="nav-btn w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md" data-section="integration">
+                                <i class="fas fa-plug mr-3"></i>Integration Hub
+                            </button>
+                        </nav>
+                    </div>
+                </div>
+
+                <!-- Main Content -->
+                <div class="flex-1 p-8 bg-gray-50">
+                    <!-- Dashboard Section -->
+                    <div id="dashboardSection" class="content-section">
+                        <h2 class="text-2xl font-bold mb-6 text-gray-800">Dashboard</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                            <div class="bg-white p-6 rounded-lg shadow-md">
+                                <div class="flex items-center">
+                                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                                        <i class="fas fa-users text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-sm font-medium text-gray-600">Total Employees</h3>
+                                        <p class="text-3xl font-bold text-blue-600" id="totalEmployees">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-lg shadow-md">
+                                <div class="flex items-center">
+                                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                                        <i class="fas fa-user-check text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-sm font-medium text-gray-600">Active Employees</h3>
+                                        <p class="text-3xl font-bold text-green-600" id="activeEmployees">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-lg shadow-md">
+                                <div class="flex items-center">
+                                    <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                                        <i class="fas fa-calendar-alt text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-sm font-medium text-gray-600">On Leave</h3>
+                                        <p class="text-3xl font-bold text-yellow-600" id="onLeave">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-lg shadow-md">
+                                <div class="flex items-center">
+                                    <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                                        <i class="fas fa-user-plus text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-sm font-medium text-gray-600">New Hires</h3>
+                                        <p class="text-3xl font-bold text-purple-600" id="newHires">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4 text-gray-800">Recent Activities</h3>
+                            <div id="recentActivities" class="space-y-2">
+                                <p class="text-gray-600">No recent activities</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Employees Section -->
+                    <div id="employeesSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Employee Management</h2>
+                        
+                        <!-- Employee Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Employees</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="totalEmployees">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Employees</h4>
+                                <p class="text-2xl font-bold text-green-600" id="activeEmployees">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">New Hires This Month</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="newHiresThisMonth">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Departments</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="totalDepartmentsCount">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Search and Filters -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex flex-wrap gap-4 items-center">
+                                <div class="flex-1 min-w-64">
+                                    <input type="text" id="searchInput" placeholder="Search employees..." class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                                <select id="departmentFilter" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">All Departments</option>
+                                </select>
+                                <select id="statusFilter" class="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="">All Status</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Inactive">Inactive</option>
+                                </select>
+                                <button id="searchBtn" class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700">Search</button>
+                                <button id="clearFiltersBtn" class="bg-gray-500 text-white px-6 py-2 rounded-md hover:bg-gray-600">Clear</button>
+                            </div>
+                        </div>
+
+                        <!-- Employees Table -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Employees</h3>
+                                <button id="addEmployeeBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Employee</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Position</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="employeesTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Employees will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pagination -->
+                            <div class="flex justify-between items-center mt-4">
+                                <div class="text-sm text-gray-700">
+                                    Showing <span id="startRecord">1</span> to <span id="endRecord">10</span> of <span id="totalRecords">0</span> employees
+                                </div>
+                                <div class="flex space-x-2">
+                                    <button id="prevPage" class="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50">Previous</button>
+                                    <button id="nextPage" class="px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recruitment Section -->
+                    <div id="recruitmentSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Recruitment & Talent Acquisition</h2>
+                        
+                        <!-- Recruitment Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Jobs</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="activeJobsCount">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Candidates</h4>
+                                <p class="text-2xl font-bold text-green-600" id="totalCandidates">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Interviews Scheduled</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="scheduledInterviews">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Hired This Month</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="hiredThisMonth">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Job Postings -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Job Postings</h3>
+                                <button id="addJobBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Post New Job</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="jobsTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Jobs will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Candidates -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Candidates</h3>
+                                <button id="addCandidateBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Add Candidate</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Applied For</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="candidatesTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Candidates will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Departments Section -->
+                    <div id="departmentsSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Departments & Organization</h2>
+                        
+                        <!-- Department Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Departments</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="totalDepartments">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Departments</h4>
+                                <p class="text-2xl font-bold text-green-600" id="activeDepartments">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Budget</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="totalBudget">$0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Avg. Employees/Dept</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="avgEmployeesPerDept">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Department Management -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Department List</h3>
+                                <button id="addDepartmentBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Department</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manager</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Budget</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="departmentsTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Departments will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Attendance Section -->
+                    <div id="attendanceSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Time & Attendance</h2>
+                        
+                        <!-- Attendance Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Present Today</h4>
+                                <p class="text-2xl font-bold text-green-600" id="presentToday">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Absent Today</h4>
+                                <p class="text-2xl font-bold text-red-600" id="absentToday">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Late Today</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="lateToday">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">On Leave</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="onLeaveToday">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Clock In/Out -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Clock In/Out</h3>
+                            <div class="flex gap-4">
+                                <button id="clockInBtn" class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700">Clock In</button>
+                                <button id="clockOutBtn" class="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700">Clock Out</button>
+                                <span id="currentTime" class="text-lg font-semibold text-gray-700"></span>
+                            </div>
+                        </div>
+
+                        <!-- Attendance Records -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Attendance Records</h3>
+                                <div class="flex gap-2">
+                                    <input type="date" id="attendanceDate" class="px-3 py-2 border border-gray-300 rounded-md">
+                                    <button id="viewAttendanceBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">View</button>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Hours</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="attendanceTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Attendance records will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Leave Section -->
+                    <div id="leaveSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Leave Management</h2>
+                        
+                        <!-- Leave Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Pending Requests</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="pendingLeaveRequests">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Approved This Month</h4>
+                                <p class="text-2xl font-bold text-green-600" id="approvedLeaveThisMonth">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">On Leave Today</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="onLeaveTodayCount">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Leave Days</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="totalLeaveDays">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Leave Requests -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Leave Requests</h3>
+                                <button id="requestLeaveBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Request Leave</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Start Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaveRequestsTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Leave requests will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payroll Section -->
+                    <div id="payrollSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Payroll & Compensation</h2>
+                        
+                        <!-- Payroll Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Payroll</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="totalPayroll">$0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Average Salary</h4>
+                                <p class="text-2xl font-bold text-green-600" id="averageSalary">$0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">This Month</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="thisMonthPayroll">$0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Processed</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="processedPayroll">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Payroll Records -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Payroll Records</h3>
+                                <div class="flex gap-2">
+                                    <select id="payrollPeriod" class="px-3 py-2 border border-gray-300 rounded-md">
+                                        <option value="">Select Period</option>
+                                        <option value="current">Current Month</option>
+                                        <option value="previous">Previous Month</option>
+                                        <option value="quarter">This Quarter</option>
+                                    </select>
+                                    <button id="generatePayrollBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Generate Payroll</button>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pay Period</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Basic Salary</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Allowances</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deductions</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Net Pay</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="payrollTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Payroll records will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Section -->
+                    <div id="performanceSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Performance Management</h2>
+                        
+                        <!-- Performance Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Reviews</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="activeReviews">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Completed Reviews</h4>
+                                <p class="text-2xl font-bold text-green-600" id="completedReviews">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Average Rating</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="averageRating">0.0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Due This Month</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="dueThisMonth">0</p>
+                            </div>
+                        </div>
+
+                        <!-- Performance Reviews -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Performance Reviews</h3>
+                                <button id="createReviewBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Create Review</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Review Period</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reviewer</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rating</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="performanceTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Performance reviews will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Learning Section -->
+                    <div id="learningSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Learning & Development</h2>
+                        
+                        <!-- Learning Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Courses</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="activeCourses">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Enrolled Employees</h4>
+                                <p class="text-2xl font-bold text-green-600" id="enrolledEmployees">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Completed This Month</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="completedThisMonth">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Average Score</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="averageScore">0%</p>
+                            </div>
+                        </div>
+
+                        <!-- Training Programs -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Training Programs</h3>
+                                <button id="addTrainingBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Training</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrolled</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="trainingTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Training programs will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Employee Training -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4">Employee Training Records</h3>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Training</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrollment Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="employeeTrainingTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Employee training records will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Benefits Section -->
+                    <div id="benefitsSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Benefits Administration</h2>
+                        
+                        <!-- Benefits Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Benefits</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="activeBenefits">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Enrolled Employees</h4>
+                                <p class="text-2xl font-bold text-green-600" id="enrolledInBenefits">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Cost</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="totalBenefitsCost">$0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Coverage Rate</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="coverageRate">0%</p>
+                            </div>
+                        </div>
+
+                        <!-- Benefits Programs -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Benefits Programs</h3>
+                                <button id="addBenefitBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Benefit</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrolled</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="benefitsTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Benefits programs will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Employee Benefits -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4">Employee Benefits Enrollment</h3>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Benefit</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enrollment Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Effective Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contributions</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="employeeBenefitsTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Employee benefits will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Section -->
+                    <div id="analyticsSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Workforce Analytics & Insights</h2>
+                        
+                        <!-- Analytics Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Total Workforce</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="totalWorkforce">0</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Turnover Rate</h4>
+                                <p class="text-2xl font-bold text-green-600" id="turnoverRate">0%</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Avg. Tenure</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="avgTenure">0 years</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Diversity Index</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="diversityIndex">0%</p>
+                            </div>
+                        </div>
+
+                        <!-- Charts and Reports -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-white p-6 rounded-lg shadow-md">
+                                <h3 class="text-lg font-semibold mb-4">Department Distribution</h3>
+                                <div id="departmentChart" class="h-64 flex items-center justify-center text-gray-500">
+                                    Chart will be displayed here
+                                </div>
+                            </div>
+                            <div class="bg-white p-6 rounded-lg shadow-md">
+                                <h3 class="text-lg font-semibold mb-4">Gender Distribution</h3>
+                                <div id="genderChart" class="h-64 flex items-center justify-center text-gray-500">
+                                    Chart will be displayed here
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detailed Reports -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Detailed Reports</h3>
+                                <div class="flex gap-2">
+                                    <select id="reportType" class="px-3 py-2 border border-gray-300 rounded-md">
+                                        <option value="hiring">Hiring Trends</option>
+                                        <option value="attrition">Attrition Analysis</option>
+                                        <option value="compensation">Compensation Analysis</option>
+                                        <option value="performance">Performance Trends</option>
+                                    </select>
+                                    <button id="generateReportBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Generate Report</button>
+                                </div>
+                            </div>
+                            <div id="reportContent" class="mt-4">
+                                <p class="text-gray-600">Select a report type and click generate to view detailed analytics.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Employee Experience Section -->
+                    <div id="experienceSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Employee Experience & Engagement</h2>
+                        
+                        <!-- Experience Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Engagement Score</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="engagementScore">85%</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Recognition Awards</h4>
+                                <p class="text-2xl font-bold text-green-600" id="recognitionAwards">24</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Exit Interviews</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="exitInterviews">12</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Chatbot Queries</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="chatbotQueries">156</p>
+                            </div>
+                        </div>
+
+                        <!-- Recognition Platform -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Recognition & Rewards</h3>
+                                <button id="giveRecognitionBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Give Recognition</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recognition Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Given By</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recognitionTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Recognition records will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Engagement Surveys -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Pulse Surveys</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="font-medium mb-2">Recent Survey Results</h4>
+                                    <div id="surveyResults" class="space-y-2">
+                                        <!-- Survey results will be populated here -->
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium mb-2">Quick Survey</h4>
+                                    <button id="createSurveyBtn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Create New Survey</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI Chatbot -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4">AI HR Assistant</h3>
+                            <div class="border rounded-lg p-4 bg-gray-50">
+                                <div id="chatbotMessages" class="h-64 overflow-y-auto mb-4">
+                                    <div class="text-sm text-gray-600">AI Assistant: Hello! How can I help you today?</div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <input type="text" id="chatbotInput" placeholder="Ask me anything..." class="flex-1 px-3 py-2 border border-gray-300 rounded-md">
+                                    <button id="sendMessageBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Compliance & Risk Management Section -->
+                    <div id="complianceSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Compliance & Risk Management</h2>
+                        
+                        <!-- Compliance Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Cases</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="activeCases">8</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Policy Violations</h4>
+                                <p class="text-2xl font-bold text-red-600" id="policyViolations">3</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Whistleblower Reports</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="whistleblowerReports">2</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Audit Score</h4>
+                                <p class="text-2xl font-bold text-green-600" id="auditScore">92%</p>
+                            </div>
+                        </div>
+
+                        <!-- Compliance Cases -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Compliance Cases</h3>
+                                <button id="createCaseBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Create Case</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Case Number</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="complianceCasesTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Compliance cases will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Policy Management -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Policy Management</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="font-medium mb-2">Policy Attestation</h4>
+                                    <div id="policyAttestations" class="space-y-2">
+                                        <!-- Policy attestations will be populated here -->
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium mb-2">Background Checks</h4>
+                                    <div id="backgroundChecks" class="space-y-2">
+                                        <!-- Background checks will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Audit Trails -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4">Audit Trails</h3>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Module</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="auditTrailsTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Audit trails will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mobile & Self-Service Section -->
+                    <div id="mobileSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Mobile & Self-Service HR</h2>
+                        
+                        <!-- Mobile Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Mobile Users</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="mobileUsers">156</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">App Downloads</h4>
+                                <p class="text-2xl font-bold text-green-600" id="appDownloads">234</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Push Notifications</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="pushNotifications">89</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Voice Commands</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="voiceCommands">45</p>
+                            </div>
+                        </div>
+
+                        <!-- Mobile App Management -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">Mobile App Features</h3>
+                                <button id="updateAppBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Update App</button>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div class="border rounded-lg p-4">
+                                    <h4 class="font-medium mb-2">Approvals</h4>
+                                    <p class="text-sm text-gray-600">Leave requests, expense approvals, time-off requests</p>
+                                    <div class="mt-2">
+                                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Active</span>
+                                    </div>
+                                </div>
+                                <div class="border rounded-lg p-4">
+                                    <h4 class="font-medium mb-2">Digital Documents</h4>
+                                    <p class="text-sm text-gray-600">Payslips, tax forms, benefits documents</p>
+                                    <div class="mt-2">
+                                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Active</span>
+                                    </div>
+                                </div>
+                                <div class="border rounded-lg p-4">
+                                    <h4 class="font-medium mb-2">Biometric Auth</h4>
+                                    <p class="text-sm text-gray-600">Fingerprint, facial recognition, voice commands</p>
+                                    <div class="mt-2">
+                                        <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Beta</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Device Management -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Device Management</h3>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full table-auto">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">OS Version</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Sync</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deviceManagementTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Device management will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Voice Assistant -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4">Voice-Enabled Assistant</h3>
+                            <div class="border rounded-lg p-4 bg-gray-50">
+                                <div class="flex items-center gap-4 mb-4">
+                                    <div class="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white text-xl">🎤</span>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-medium">Voice Commands</h4>
+                                        <p class="text-sm text-gray-600">"Approve my leave request", "Show my payslip", "Clock me in"</p>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button id="startVoiceBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Start Voice Assistant</button>
+                                    <button id="voiceSettingsBtn" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">Settings</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Integration Hub Section -->
+                    <div id="integrationSection" class="content-section hidden">
+                        <h2 class="text-2xl font-bold mb-6">Integration Hub</h2>
+                        
+                        <!-- Integration Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Active Integrations</h4>
+                                <p class="text-2xl font-bold text-blue-600" id="activeIntegrations">12</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Data Sync Status</h4>
+                                <p class="text-2xl font-bold text-green-600" id="dataSyncStatus">98%</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">API Calls Today</h4>
+                                <p class="text-2xl font-bold text-yellow-600" id="apiCallsToday">1,234</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow-md">
+                                <h4 class="text-sm font-medium text-gray-500">Custom Workflows</h4>
+                                <p class="text-2xl font-bold text-purple-600" id="customWorkflows">8</p>
+                            </div>
+                        </div>
+
+                        <!-- ERP Integrations -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-semibold">ERP Integrations</h3>
+                                <button id="addIntegrationBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add Integration</button>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div class="border rounded-lg p-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-lg">💼</span>
+                                        <h4 class="font-medium">SAP</h4>
+                                    </div>
+                                    <p class="text-sm text-gray-600">Financial data, cost centers, budget sync</p>
+                                    <div class="mt-2">
+                                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Connected</span>
+                                    </div>
+                                </div>
+                                <div class="border rounded-lg p-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-lg">🏢</span>
+                                        <h4 class="font-medium">Oracle</h4>
+                                    </div>
+                                    <p class="text-sm text-gray-600">HR modules, payroll integration</p>
+                                    <div class="mt-2">
+                                        <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Connected</span>
+                                    </div>
+                                </div>
+                                <div class="border rounded-lg p-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="text-lg">📊</span>
+                                        <h4 class="font-medium">Workday</h4>
+                                    </div>
+                                    <p class="text-sm text-gray-600">Financial planning, reporting</p>
+                                    <div class="mt-2">
+                                        <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Pending</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CRM & IT Integrations -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <h3 class="text-lg font-semibold mb-4">CRM & IT System Integrations</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="font-medium mb-2">Salesforce Integration</h4>
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Employee data sync</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Sales team HR access</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium mb-2">IT Systems</h4>
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Active Directory</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Okta SSO</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Integration Table -->
+                        <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                            <h3 class="text-lg font-semibold mb-4">Integration Management</h3>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Integration</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Sync</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Health</th>
+                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="integrationTable" class="bg-white divide-y divide-gray-200">
+                                        <!-- Integration data will be loaded here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- API Marketplace -->
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <h3 class="text-lg font-semibold mb-4">API Marketplace & Custom Workflows</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="font-medium mb-2">Third-Party APIs</h4>
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">LinkedIn Recruiting</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Connected</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Slack Notifications</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Connected</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Zoom Meetings</span>
+                                            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Connected</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium mb-2">Custom Workflows</h4>
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Onboarding Automation</span>
+                                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Performance Review</span>
+                                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm">Leave Approval</span>
+                                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

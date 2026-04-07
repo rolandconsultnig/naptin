@@ -1,0 +1,89 @@
+================================================================================
+                    OWL-TALK WINDOWS INSTALLATION GUIDE
+================================================================================
+
+This package will automatically install and configure Owl-talk on Windows.
+
+STEP 1: INSTALL PREREQUISITES
+-----------------------------
+Before running the installer, please install:
+
+1. Python 3.8 or later
+   - Download from: https://www.python.org/downloads/
+   - IMPORTANT: Check "Add Python to PATH" during installation
+
+2. Node.js 16 or later  
+   - Download from: https://nodejs.org/
+   - Install the LTS (Long Term Support) version
+
+3. PostgreSQL 12 or later
+   - Download from: https://www.postgresql.org/download/windows/
+   - During installation:
+     * Remember the password for 'postgres' user
+     * Default password used: Samolan123
+     * Keep default port: 5432
+
+
+STEP 2: RUN THE INSTALLER
+--------------------------
+1. Right-click on "install.bat"
+2. Select "Run as administrator"
+3. Follow the on-screen instructions
+
+
+STEP 3: START THE SERVER
+-------------------------
+1. Double-click "start-server.bat"
+2. Wait for the server to start
+3. Open your browser to: http://localhost:3000
+
+
+DEFAULT LOGIN
+-------------
+Username: admin
+Password: admin123
+
+
+TROUBLESHOOTING
+---------------
+If you encounter errors:
+
+1. Database Connection Failed
+   - Make sure PostgreSQL service is running
+   - Check password in main.py matches PostgreSQL setup
+
+2. Port Already in Use
+   - Close any existing Owl-talk instances
+   - Check if other applications are using ports 3000 or 5117
+
+3. Module Not Found Errors
+   - Run: venv\Scripts\activate
+   - Run: pip install -r requirements.txt
+
+4. Node Module Errors
+   - Run: cd frontend
+   - Run: npm install
+
+
+ACCESS FROM OTHER DEVICES
+--------------------------
+To access from other devices on your network:
+
+1. Find your computer's IP address:
+   - Open Command Prompt
+   - Type: ipconfig
+   - Look for "IPv4 Address"
+
+2. From other devices, open:
+   - http://YOUR_IP_ADDRESS:3000
+
+
+FOR MORE HELP
+-------------
+See README.md for detailed information
+
+
+================================================================================
+                          GOOD LUCK! 🦉
+================================================================================
+

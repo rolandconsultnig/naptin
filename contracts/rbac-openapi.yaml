@@ -1,0 +1,246 @@
+openapi: 3.0.3
+info:
+  title: NAPTIN RBAC API
+  version: 1.0.0
+  description: User, role, permission and audit APIs for super-admin RBAC management.
+servers:
+  - url: https://localhost:8080/api/v1/admin/rbac
+paths:
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: department
+          schema: { type: string }
+        - in: query
+          name: role
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200':
+          description: Users list
+    post:
+      tags: [Users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: Created
+  /users/{id}:
+    patch:
+      tags: [Users]
+      summary: Update user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Updated
+  /users/{id}/disable:
+    post:
+      tags: [Users]
+      summary: Disable user account
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Disabled
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      responses:
+        '200':
+          description: Roles list
+    post:
+      tags: [Roles]
+      summary: Create role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        '201':
+          description: Created
+  /roles/{id}:
+    patch:
+      tags: [Roles]
+      summary: Update role
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200':
+          description: Updated
+  /permissions:
+    get:
+      tags: [Permissions]
+      summary: List permissions
+      parameters:
+        - in: query
+          name: module
+          schema: { type: string }
+      responses:
+        '200':
+          description: Permissions list
+  /roles/{id}/permissions:
+    get:
+      tags: [Permissions]
+      summary: Get role permissions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Role permissions
+    put:
+      tags: [Permissions]
+      summary: Replace role permissions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permissionCodes:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Updated
+  /matrix:
+    get:
+      tags: [Permissions]
+      summary: Role-permission matrix
+      parameters:
+        - in: query
+          name: module
+          schema: { type: string }
+      responses:
+        '200':
+          description: Matrix
+  /modules:
+    get:
+      tags: [Modules]
+      summary: List RBAC modules
+      responses:
+        '200':
+          description: Modules list
+  /audit:
+    get:
+      tags: [Audit]
+      summary: List RBAC audit entries
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Audit list
+  /sod/check/user/{id}:
+    get:
+      tags: [SoD]
+      summary: Check user segregation-of-duty conflicts
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Conflicts list
+components:
+  schemas:
+    CreateUserRequest:
+      type: object
+      required: [employeeId, firstName, lastName, email]
+      properties:
+        employeeId: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        departmentCode: { type: string }
+        primaryRoleCode: { type: string }
+        supervisorUserId: { type: integer }
+        employmentStatus: { type: string }
+        accountStatus: { type: string }
+        mfaEnabled: { type: boolean }
+        accountExpiry: { type: string, format: date }
+    UpdateUserRequest:
+      type: object
+      properties:
+        employeeId: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        departmentCode: { type: string }
+        primaryRoleCode: { type: string }
+        supervisorUserId: { type: integer }
+        employmentStatus: { type: string }
+        accountStatus: { type: string }
+        mfaEnabled: { type: boolean }
+        accountExpiry: { type: string, format: date }
+    CreateRoleRequest:
+      type: object
+      required: [roleCode, roleName]
+      properties:
+        roleCode: { type: string }
+        roleName: { type: string }
+        description: { type: string }
+        departmentCode: { type: string }
+        roleLevel: { type: integer }
+        supervisorRoleCode: { type: string }
+        status: { type: string }
+    UpdateRoleRequest:
+      type: object
+      properties:
+        roleCode: { type: string }
+        roleName: { type: string }
+        description: { type: string }
+        departmentCode: { type: string }
+        roleLevel: { type: integer }
+        supervisorRoleCode: { type: string }
+        status: { type: string }

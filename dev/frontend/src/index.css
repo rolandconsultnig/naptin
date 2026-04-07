@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .whatsapp-sidebar {
+    @apply w-1/4 border-r border-gray-300;
+  }
+  
+  .whatsapp-chat-bg {
+    @apply bg-[#efeae2] bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAJISURBVEiJ7ZU9aBRBFMd/3yZRVBS0UbGwsLBQxEIQCwsLwcJCwUJBsVKwsLAQsRCsVCwsBCwsbBQRC0VQQYxgQYJGsIiK2CTCZrJYxGIjk+x3Ozuzs1/MO7sZ3CZkJ5OFSeY9/u//3/+ZN7MhzT+/Mk39/LP8PwQXA0yWgayrBhPuw4Q+1KRTnJ8CYua5c2Ql4mJKJGnmvbklzqBHgR3lLFPNtNPcO6KsC4FEZOP9HhD65CjezvT2Ky5wjB/gFwNgdphWtRI1gZufTv2/yvT2G1am/SnqgAmVB1RfV1wECoFDFaQY6bCvClIMpATFQGpQE/BExJZ/EhbwxjCAaEWAQ8y5Pt3KPkSVv1HgaGhAwdPEugIRUdXlwCHEsKlMt7IfUeXFYLtuwY6lql7kFFmCXcLxz8oC/v8PjgE3gcPAVrVcVVfU8pQWB0dRP9p+eOsnVPMeIG1P5tE1TyJ7u1r9MHANGAEvh1m+pZYHtDg8jvrhti8A+yqZC/QBhuM5GC6epJJ+gurLwBa17qg1LrwJPI8N5+yAXpZwM6pmklnAMmBRNHdeGKtuMYEfou+YCcHgE3H2owHrEIIGA3CkWO3MgGGIKP6ouDLVVzX8B9hVxd0G8yQOy0Yl7Z3O46LFRUK1RCiLBPOAh2DabgW2AFOqTtgTR2MOj6J+tOOimRg0GIAjxWpnJ+BtBXaZqbcUwOUib1H9VcNjwA2ovqh+1BvNzCgSY8KrXDxBJe0EqodngHnAJqBd1ZOqDqjlPk27wnE8+g1RdTQ2nLMj+hMBRkFE8UfgHVAAtoN5Nz0NDhE9VgWvRwjDEd/N8xxQALYD3Wp+UsNlE0Y+kGnlKt0vEQ+JPuj/7j8VDXgV4DxpwpJYOKqGR9GwORp2A4PHQR0ewmUK0KWWu6p2zp7w8Ml3cDvM0/ByjwdL8sEPgJGIsvjwFUw7wAzqn6v+vZgYgV3PwHrwTwHzBxsX+noBv5HcgC4Dnw9dOHVm5ePRVUdL5G6Pzlx+StgzB7hEmVDIj/n2cB6n7+AQRv5EsWu/5/AAAAAElFTkSuQmCC')];
+  }
+  
+  .message-sent {
+    @apply bg-[#d9fdd3] float-right rounded-tl-lg rounded-tr-lg rounded-bl-lg rounded-br-none px-3 py-2 mx-4 mb-1 max-w-[65%] sm:max-w-[75%];
+  }
+  
+  .message-received {
+    @apply bg-white float-left rounded-tl-none rounded-tr-lg rounded-bl-lg rounded-br-lg px-3 py-2 mx-4 mb-1 max-w-[65%] sm:max-w-[75%];
+  }
+  
+  .chat-item {
+    @apply flex items-center p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-200 transition-colors relative;
+  }
+  
+  .chat-item-active {
+    @apply bg-gray-100;
+  }
+}

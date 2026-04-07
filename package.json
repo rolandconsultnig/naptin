@@ -1,0 +1,45 @@
+{
+  "name": "naptin-portal",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "prebuild": "node scripts/generate-pwa-icons.mjs",
+    "predev": "node scripts/generate-pwa-icons.mjs && node scripts/clean-dev-dist.mjs",
+    "dev": "vite",
+    "api": "node server/index.js",
+    "db:apply": "node scripts/db-apply-sql.mjs",
+    "db:schema": "npm run db:apply -- server/schema.sql",
+    "db:seed": "npm run db:apply -- server/seed.sql",
+    "db:rbac:schema": "npm run db:apply -- server/rbac_schema.sql",
+    "db:rbac:seed": "npm run db:apply -- server/rbac_seed.sql",
+    "build": "vite build",
+    "preview": "vite preview",
+    "smoke:hrms:slice4": "node scripts/hrms-slice4-smoke.mjs"
+  },
+  "dependencies": {
+    "axios": "^1.14.0",
+    "clsx": "^2.1.0",
+    "cors": "^2.8.6",
+    "date-fns": "^3.4.0",
+    "express": "^5.2.1",
+    "lucide-react": "^0.363.0",
+    "pg": "^8.20.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^6.22.0",
+    "recharts": "^2.12.2",
+    "socket.io-client": "^4.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "jimp": "^1.6.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "vite": "^5.2.0",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}

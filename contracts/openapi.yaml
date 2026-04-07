@@ -1,0 +1,330 @@
+openapi: 3.0.3
+info:
+  title: NAPTIN Enterprise Portal API
+  description: |
+    Contract sketch for a future backend aligned with portal modules.
+    All paths are prefixed by `/api/v1` unless behind a gateway.
+    Authentication — Bearer JWT; roles — staff | hod | director | ict_admin | auditor.
+  version: 0.1.0
+servers:
+  - url: https://portal.naptin.gov.ng/api/v1
+    description: Production (illustrative)
+  - url: http://localhost:8080/api/v1
+    description: Local dev
+
+tags:
+  - name: auth
+  - name: directory
+  - name: collaboration
+  - name: chat
+  - name: meetings
+  - name: hr
+  - name: finance
+  - name: client_ops_new_markets
+  - name: documents
+  - name: integrations
+  - name: security
+  - name: admin
+  - name: corporate
+  - name: ict
+  - name: mande
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Issue session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401': { description: Invalid credentials }
+
+  /auth/session:
+    get:
+      tags: [auth]
+      summary: Current user and roles
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+
+  /directory/staff:
+    get:
+      tags: [directory]
+      summary: Search organisation directory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: department
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/StaffMember' }
+
+  /collaboration/workspaces:
+    get:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Team workspaces
+    post:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+      summary: Create workspace
+
+  /collaboration/files:
+    get:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+      summary: Shared files listing
+    post:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+      summary: Initiate upload (returns signed URL)
+
+  /collaboration/projects:
+    get:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+  /collaboration/projects/{projectId}/tasks:
+    get:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+    post:
+      tags: [collaboration]
+      security: [{ bearerAuth: [] }]
+
+  /chat/channels:
+    get:
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+  /chat/channels/{channelId}/messages:
+    get:
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+    post:
+      tags: [chat]
+      security: [{ bearerAuth: [] }]
+      summary: Send message (REST fallback; prefer WebSocket)
+
+  /meetings:
+    get:
+      tags: [meetings]
+      security: [{ bearerAuth: [] }]
+    post:
+      tags: [meetings]
+      security: [{ bearerAuth: [] }]
+
+  /hr/recruitment/vacancies:
+    get:
+      tags: [hr]
+      security: [{ bearerAuth: [] }]
+  /hr/payroll/runs:
+    get:
+      tags: [hr]
+      security: [{ bearerAuth: [] }]
+      description: Restricted — typically HR, Finance, Director roles
+  /hr/talent/cycles:
+    get:
+      tags: [hr]
+      security: [{ bearerAuth: [] }]
+  /hr/attendance/sites:
+    get:
+      tags: [hr]
+      security: [{ bearerAuth: [] }]
+
+  /finance/transactions:
+    get:
+      tags: [finance]
+      security: [{ bearerAuth: [] }]
+
+  /workbench/summary:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Top-level workbench metrics for Client Ops and New Markets
+
+  /workbench/onboarding:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: List onboarding records
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Create onboarding workflow from closed-won trigger
+
+  /workbench/health:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Client health scores and risk bands
+  /workbench/health/{clientId}/recalculate:
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Recalculate health score and trigger risk workflow
+
+  /workbench/opportunities:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Upsell and cross-sell opportunities
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Create opportunity
+
+  /workbench/markets/candidates:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Candidate markets with weighted scores
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Add candidate market
+
+  /workbench/pilots:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Market entry pilot records
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Create pilot charter
+
+  /workbench/feedback:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Client feedback queue and routing status
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Submit feedback item
+
+  /workbench/renewals:
+    get:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Contract renewal pipeline
+    post:
+      tags: [client_ops_new_markets]
+      security: [{ bearerAuth: [] }]
+      summary: Create renewal proposal
+
+  /documents/records:
+    get:
+      tags: [documents]
+      security: [{ bearerAuth: [] }]
+      description: Enterprise DMS register — hod, director, ict_admin, auditor (mirror frontend RBAC)
+
+  /integrations/connectors:
+    get:
+      tags: [integrations]
+      security: [{ bearerAuth: [] }]
+      description: director, ict_admin only
+
+  /security/audit-events:
+    get:
+      tags: [security]
+      security: [{ bearerAuth: [] }]
+      description: director, ict_admin, auditor
+
+  /admin/facilities/tickets:
+    get:
+      tags: [admin]
+      security: [{ bearerAuth: [] }]
+  /admin/fleet/vehicles:
+    get:
+      tags: [admin]
+      security: [{ bearerAuth: [] }]
+
+  /corporate/legal/matters:
+    get:
+      tags: [corporate]
+      security: [{ bearerAuth: [] }]
+  /corporate/risk/register:
+    get:
+      tags: [corporate]
+      security: [{ bearerAuth: [] }]
+
+  /ict/tickets:
+    get:
+      tags: [ict]
+      security: [{ bearerAuth: [] }]
+
+  /mande/kpis:
+    get:
+      tags: [mande]
+      security: [{ bearerAuth: [] }]
+  /mande/projects:
+    get:
+      tags: [mande]
+      security: [{ bearerAuth: [] }]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: '#/components/schemas/StaffMember' }
+        roleKey:
+          type: string
+          enum: [staff, hod, director, ict_admin, auditor]
+
+    Session:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/StaffMember' }
+        roleKey:
+          type: string
+          enum: [staff, hod, director, ict_admin, auditor]
+
+    StaffMember:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        department: { type: string }
+        role: { type: string }
+        grade: { type: string }
+        staffId: { type: string }

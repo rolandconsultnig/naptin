@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --naptin-green: #006838;
+    --naptin-dark: #004D28;
+    --naptin-gold: #FFD700;
+    --naptin-light: #E8F5EE;
+    --surface: #F7FAF8;
+    --border: rgba(0,104,56,0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: #F7FAF8;
+    color: #0D1F0D;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3,h4,h5 { font-family: 'Plus Jakarta Sans', sans-serif; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply flex items-center gap-2 bg-[#006838] text-white font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-[#004D28] transition-all duration-150 cursor-pointer;
+  }
+  .btn-secondary {
+    @apply flex items-center gap-2 bg-white text-slate-600 font-semibold px-5 py-2.5 rounded-xl text-sm border border-slate-200 hover:bg-slate-50 transition-all duration-150 cursor-pointer;
+  }
+  .btn-ghost {
+    @apply flex items-center gap-2 text-slate-500 font-medium px-4 py-2 rounded-lg text-sm hover:bg-slate-100 transition-colors duration-150 cursor-pointer;
+  }
+  .card {
+    @apply bg-white rounded-2xl border border-slate-100 p-5 shadow-sm;
+  }
+  .input {
+    @apply w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-white outline-none focus:border-[#006838] focus:ring-2 focus:ring-[#006838]/10 transition-all placeholder:text-slate-400;
+  }
+  .select {
+    @apply w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 bg-white outline-none focus:border-[#006838] focus:ring-2 focus:ring-[#006838]/10 transition-all;
+  }
+  .label { @apply block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5; }
+  .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold; }
+  .badge-green { @apply badge bg-emerald-50 text-emerald-700; }
+  .badge-amber { @apply badge bg-amber-50 text-amber-700; }
+  .badge-red { @apply badge bg-red-50 text-red-700; }
+  .badge-blue { @apply badge bg-blue-50 text-blue-700; }
+  .badge-slate { @apply badge bg-slate-100 text-slate-600; }
+  .stat-card {
+    @apply bg-white rounded-2xl border border-slate-100 p-4 shadow-sm;
+  }
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 cursor-pointer transition-all duration-150 hover:bg-[#006838]/5 hover:text-[#006838] mx-1;
+  }
+  .sidebar-link.active {
+    @apply bg-[#006838]/10 text-[#006838] font-semibold;
+  }
+  .table-th {
+    @apply text-left px-4 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/80;
+  }
+  .table-td {
+    @apply px-4 py-3.5 border-b border-slate-50 text-sm text-slate-700;
+  }
+}
+
+@layer utilities {
+  .font-jakarta { font-family: 'Plus Jakarta Sans', sans-serif; }
+  .font-mono-custom { font-family: 'JetBrains Mono', monospace; }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 10px; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pulse-slow {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-fade-up { animation: fadeUp 0.4s ease both; }
+.animate-fade-in { animation: fadeIn 0.3s ease both; }
+.animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+/* Owl Talk / dev chat (Messages page) */
+@layer components {
+  .whatsapp-sidebar {
+    @apply w-full max-w-sm sm:w-1/3 lg:w-1/4 min-w-[280px] border-r border-gray-300;
+  }
+  .whatsapp-chat-bg {
+    @apply bg-[#efeae2] bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAJISURBVEiJ7ZU9aBRBFMd/3yZRVBS0UbGwsLBQxEIQCwsLwcJCwUJBsVKwsLAQsRCsVCwsBCwsbBQRC0VQQYxgQYJGsIiK2CTCZrJYxGIjk+x3Ozuzs1/MO7sZ3CZkJ5OFSeY9/u//3/+ZN7MhzT+/Mk39/LP8PwQXA0yWgayrBhPuw4Q+1KRTnJ8CYua5c2Ql4mJKJGnmvbklzqBHgR3lLFPNtNPcO6KsC4FEZOP9HhD65CjezvT2Ky5wjB/gFwNgdphWtRI1gZufTv2/yvT2G1am/SnqgAmVB1RfV1wECoFDFaQY6bCvClIMpATFQGpQE/BExJZ/EhbwxjCAaEWAQ8y5Pt3KPkSVv1HgaGhAwdPEugIRUdXlwCHEsKlMt7IfUeXFYLtuwY6lql7kFFmCXcLxz8oC/v8PjgE3gcPAVrVcVVfU8pQWB0dRP9p+eOsnVPMeIG1P5tE1TyJ7u1r9MHANGAEvh1m+pZYHtDg8jvrhti8A+yqZC/QBhuM5GC6epJJ+gurLwBa17qg1LrwJPI8N5+yAXpZwM6pmklnAMmBRNHdeGKtuMYEfou+YCcHgE3H2owHrEIIGA3CkWO3MgGGIKP6ouDLVVzX8B9hVxd0G8yQOy0Yl7Z3O46LFRUK1RCiLBPOAh2DabgW2AFOqTtgTR2MOj6J+tOOimRg0GIAjxWpnJ+BtBXaZqbcUwOUib1H9VcNjwA2ovqh+1BvNzCgSY8KrXDxBJe0EqodngHnAJqBd1ZOqDqjlPk27wnE8+g1RdTQ2nLMj+hMBRkFE8UfgHVAAtoN5Nz0NDhE9VgWvRwjDEd/N8xxQALYD3Wp+UsNlE0Y+kGnlKt0vEQ+JPuj/7j8VDXgV4DxpwpJYOKqGR9GwORp2A4PHQR0ewmUK0KWWu6p2zp7w8Ml3cDvM0/ByjwdL8sEPgJGIsvjwFUw7wAzqn6v+vZgYgV3PwHrwTwHzBxsX+noBv5HcgC4Dnw9dOHVm5ePRVUdL5G6Pzlx+StgzB7hEmVDIj/n2cB6n7+AQRv5EsWu/5/AAAAAElFTkSuQmCC')];
+  }
+  .message-sent {
+    @apply bg-[#d9fdd3] rounded-tl-lg rounded-tr-lg rounded-bl-lg rounded-br-none px-3 py-2 max-w-[min(75vw,20rem)] sm:max-w-[75%];
+  }
+  .message-received {
+    @apply bg-white rounded-tl-none rounded-tr-lg rounded-bl-lg rounded-br-lg px-3 py-2 max-w-[min(75vw,20rem)] sm:max-w-[75%];
+  }
+  .chat-item {
+    @apply flex items-center p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-200 transition-colors relative;
+  }
+  .chat-item-active {
+    @apply bg-gray-100;
+  }
+}

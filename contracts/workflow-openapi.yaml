@@ -1,0 +1,495 @@
+openapi: 3.0.3
+info:
+  title: NAPTIN Workflow Engine API
+  version: 0.1.0
+  description: API contract slice for Process Maker style workflow orchestration.
+servers:
+  - url: https://localhost:5117/api
+    description: NAPTIN dev backend
+
+tags:
+  - name: workflow-definition
+  - name: workflow-runtime
+  - name: workflow-inbox
+  - name: workflow-sla
+  - name: workflow-manager
+  - name: workflow-notifications
+
+paths:
+  /workflow/processes:
+    get:
+      tags: [workflow-definition]
+      summary: List workflow processes
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [draft, published, archived] }
+      responses:
+        '200':
+          description: Process definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowProcess' }
+    post:
+      tags: [workflow-definition]
+      summary: Create workflow process definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProcessRequest' }
+      responses:
+        '201':
+          description: Process created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowProcess' }
+
+  /workflow/processes/{processId}/versions:
+    post:
+      tags: [workflow-definition]
+      summary: Create a new process version
+      parameters:
+        - in: path
+          name: processId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProcessVersionRequest' }
+      responses:
+        '201':
+          description: Version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowProcessVersion' }
+
+  /workflow/processes/{processId}/versions/{versionNo}/graph:
+    put:
+      tags: [workflow-definition]
+      summary: Save graph nodes, transitions, and assignment config
+      parameters:
+        - in: path
+          name: processId
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: versionNo
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowGraph' }
+      responses:
+        '200':
+          description: Graph updated
+
+  /workflow/processes/{processId}/versions/{versionNo}/publish:
+    post:
+      tags: [workflow-definition]
+      summary: Publish a process version
+      parameters:
+        - in: path
+          name: processId
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: versionNo
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Version published
+
+  /workflow/cases:
+    post:
+      tags: [workflow-runtime]
+      summary: Start a process case
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartCaseRequest' }
+      responses:
+        '201':
+          description: Case started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowCase' }
+
+  /workflow/cases/{caseId}:
+    get:
+      tags: [workflow-runtime]
+      summary: Get case details
+      parameters:
+        - in: path
+          name: caseId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowCase' }
+
+  /workflow/cases/{caseId}/timeline:
+    get:
+      tags: [workflow-runtime]
+      summary: Get case timeline and audit trail
+      parameters:
+        - in: path
+          name: caseId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditEvent' }
+
+  /workflow/tasks/my:
+    get:
+      tags: [workflow-inbox]
+      summary: List tasks assigned to current user
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, claimed, completed, overdue] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowTask' }
+
+  /workflow/tasks/role/{roleKey}:
+    get:
+      tags: [workflow-inbox]
+      summary: List tasks for a role queue
+      parameters:
+        - in: path
+          name: roleKey
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowTask' }
+
+  /workflow/tasks/{taskId}/claim:
+    post:
+      tags: [workflow-inbox]
+      summary: Claim a self-service task
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowTask' }
+
+  /workflow/tasks/{taskId}/complete:
+    post:
+      tags: [workflow-runtime]
+      summary: Complete a task and route to next node(s)
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompleteTaskRequest' }
+      responses:
+        '200':
+          description: Task completed
+
+  /workflow/tasks/{taskId}/reassign:
+    post:
+      tags: [workflow-runtime]
+      summary: Reassign a task
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReassignTaskRequest' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowTask' }
+
+  /workflow/cases/{caseId}/cancel:
+    post:
+      tags: [workflow-manager]
+      summary: Cancel a running case
+      parameters:
+        - in: path
+          name: caseId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Case canceled
+
+  /workflow/sla/summary:
+    get:
+      tags: [workflow-sla]
+      summary: SLA summary metrics
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalCases: { type: integer }
+                  breachedCases: { type: integer }
+                  avgExceededMinutes: { type: number }
+                  totalPenalty: { type: number }
+
+  /workflow/sla/cases:
+    get:
+      tags: [workflow-sla]
+      summary: SLA case-level details
+      parameters:
+        - in: query
+          name: exceeded
+          schema: { type: boolean }
+        - in: query
+          name: status
+          schema: { type: string, enum: [open, completed, canceled] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        caseId: { type: integer }
+                        caseRef: { type: string }
+                        plannedMinutes: { type: integer }
+                        exceededMinutes: { type: integer }
+                        penaltyAmount: { type: number }
+
+  /workflow/notifications:
+    get:
+      tags: [workflow-notifications]
+      summary: List current user notifications
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowNotification' }
+
+  /workflow/notifications/{notificationId}/read:
+    post:
+      tags: [workflow-notifications]
+      summary: Mark notification as read
+      parameters:
+        - in: path
+          name: notificationId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Notification updated
+
+components:
+  schemas:
+    WorkflowProcess:
+      type: object
+      properties:
+        id: { type: integer }
+        processKey: { type: string }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string }
+        activeVersion: { type: integer }
+
+    WorkflowProcessVersion:
+      type: object
+      properties:
+        id: { type: integer }
+        processId: { type: integer }
+        versionNo: { type: integer }
+        status: { type: string }
+        graphJson: { type: object }
+
+    WorkflowNode:
+      type: object
+      required: [nodeKey, nodeType, name]
+      properties:
+        nodeKey: { type: string }
+        nodeType:
+          type: string
+          enum: [start_event, end_event, form_task, service_task, script_task, sub_process, gateway]
+        name: { type: string }
+        config: { type: object }
+
+    WorkflowTransition:
+      type: object
+      required: [fromNodeKey, toNodeKey]
+      properties:
+        fromNodeKey: { type: string }
+        toNodeKey: { type: string }
+        conditionType:
+          type: string
+          enum: [always, expression]
+        conditionExpr: { type: string }
+        priority: { type: integer }
+
+    WorkflowGraph:
+      type: object
+      required: [nodes, transitions]
+      properties:
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/WorkflowNode' }
+        transitions:
+          type: array
+          items: { $ref: '#/components/schemas/WorkflowTransition' }
+
+    CreateProcessRequest:
+      type: object
+      required: [processKey, name]
+      properties:
+        processKey: { type: string }
+        name: { type: string }
+        description: { type: string }
+
+    CreateProcessVersionRequest:
+      type: object
+      properties:
+        cloneFromVersion: { type: integer }
+
+    StartCaseRequest:
+      type: object
+      required: [processKey]
+      properties:
+        processKey: { type: string }
+        variables: { type: object }
+
+    WorkflowCase:
+      type: object
+      properties:
+        id: { type: integer }
+        caseRef: { type: string }
+        processId: { type: integer }
+        processVersionId: { type: integer }
+        status: { type: string }
+        startedBy: { type: string }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time, nullable: true }
+
+    WorkflowTask:
+      type: object
+      properties:
+        id: { type: integer }
+        caseId: { type: integer }
+        taskRef: { type: string }
+        title: { type: string }
+        status: { type: string }
+        priority: { type: integer, minimum: 1, maximum: 5 }
+        assignedUserId: { type: string, nullable: true }
+        assignedRoleKey: { type: string, nullable: true }
+        dueAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+
+    CompleteTaskRequest:
+      type: object
+      properties:
+        decision: { type: string }
+        formData: { type: object }
+        nextUserId: { type: string }
+
+    ReassignTaskRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
+        reason: { type: string }
+
+    WorkflowNotification:
+      type: object
+      properties:
+        id: { type: integer }
+        channel:
+          type: string
+          enum: [in_app, email, sms]
+        status:
+          type: string
+          enum: [queued, sent, failed, read]
+        subject: { type: string }
+        body: { type: string }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        eventType: { type: string }
+        actorId: { type: string }
+        details: { type: object }
+        createdAt: { type: string, format: date-time }

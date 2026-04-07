@@ -1,0 +1,4 @@
+#!/bin/sh
+# Gradle wrapper script
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+exec gradle -I gradle/init.gradle "$@"

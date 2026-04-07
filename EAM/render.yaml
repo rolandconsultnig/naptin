@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: eam-backend
+    env: node
+    buildCommand: npm run build:render
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+databases:
+  - name: eam-postgres
+    databaseName: eam_db
+    user: eam_user
+    plan: free 
