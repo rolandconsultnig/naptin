@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { NAPTIN_LOGO } from '../assets/images'
@@ -176,6 +176,8 @@ export default function IntranetPage() {
   const [attachmentUrl, setAttachmentUrl] = useState('')
   const [attachmentName, setAttachmentName] = useState('')
   const [loadingFeed, setLoadingFeed] = useState(false)
+  const photoInputRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     try {
@@ -229,23 +231,44 @@ export default function IntranetPage() {
   const onPickType = (type) => {
     setPostType(type)
     if (type === 'Photo') {
-      const url = window.prompt('Photo URL (https://...):', attachmentUrl || '')
-      if (url != null) setAttachmentUrl(url.trim())
-      const name = window.prompt('Photo caption / filename (optional):', attachmentName || '')
-      if (name != null) setAttachmentName(name.trim())
+      photoInputRef.current?.click()
       return
     }
     if (type === 'File') {
-      const url = window.prompt('File URL (https://...):', attachmentUrl || '')
-      if (url != null) setAttachmentUrl(url.trim())
-      const name = window.prompt('File name (optional):', attachmentName || '')
-      if (name != null) setAttachmentName(name.trim())
+      fileInputRef.current?.click()
       return
     }
     if (type === 'Announcement') {
       setAttachmentUrl('')
       setAttachmentName('')
     }
+  }
+
+  const onSelectAttachment = async (event, type) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      showToast(`Uploading ${file.name}...`)
+      const kind = type === 'Photo' ? 'photo' : 'file'
+      const uploaded = await intranetApi.upload(file, kind)
+      setAttachmentUrl(uploaded.url || '')
+      setAttachmentName(uploaded.name || file.name)
+      setPostType(type)
+      showToast(`${type} attached: ${uploaded.name || file.name}`)
+    } catch {
+      showToast(`Could not upload ${type.toLowerCase()}. Try again.`)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const resolveAttachmentUrl = (url) => {
+    if (!url) return ''
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    const apiBase = import.meta.env.VITE_WORKBENCH_API_URL || 'http://localhost:4002/api/v1'
+    const apiOrigin = apiBase.replace(/\/api\/v1\/?$/, '')
+    if (url.startsWith('/')) return `${apiOrigin}${url}`
+    return `${apiOrigin}/${url}`
   }
 
   const submitPost = async () => {
@@ -377,6 +400,19 @@ export default function IntranetPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="card">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => onSelectAttachment(e, 'Photo')}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => onSelectAttachment(e, 'File')}
+            />
             <div className="flex items-start gap-3 mb-3">
               <div className="w-9 h-9 rounded-full bg-[#006838] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                 {user?.initials ?? '—'}
@@ -417,7 +453,7 @@ export default function IntranetPage() {
             </div>
             {(attachmentUrl || attachmentName || postType !== 'Post') && (
               <div className="mt-2 text-[11px] text-slate-500">
-                {postType} {attachmentName ? `- ${attachmentName}` : ''} {attachmentUrl ? '(link attached)' : ''}
+                {postType} {attachmentName ? `- ${attachmentName}` : ''} {attachmentUrl ? '(file attached)' : ''}
               </div>
             )}
           </div>
@@ -451,8 +487,8 @@ export default function IntranetPage() {
               )})()}
               <p className="text-sm text-slate-700 leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
               {post.type === 'Photo' && post.attachmentUrl && (
-                <a href={post.attachmentUrl} target="_blank" rel="noreferrer" className="block mb-3">
-                  <img src={post.attachmentUrl} alt={post.attachmentName || 'Photo attachment'} className="w-full rounded-xl max-h-80 object-cover border border-slate-100" />
+                <a href={resolveAttachmentUrl(post.attachmentUrl)} target="_blank" rel="noreferrer" className="block mb-3">
+                  <img src={resolveAttachmentUrl(post.attachmentUrl)} alt={post.attachmentName || 'Photo attachment'} className="w-full rounded-xl max-h-80 object-cover border border-slate-100" />
                 </a>
               )}
               {post.image && !post.attachmentUrl && (
@@ -461,7 +497,7 @@ export default function IntranetPage() {
                 </div>
               )}
               {post.type === 'File' && post.attachmentUrl && (
-                <a href={post.attachmentUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-[#006838]">
+                <a href={resolveAttachmentUrl(post.attachmentUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-[#006838]">
                   <Paperclip size={13} />
                   {post.attachmentName || 'Open attached file'}
                 </a>

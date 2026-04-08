@@ -1,4 +1,7 @@
 import { Router } from 'express'
+import fs from 'fs'
+import path from 'path'
+import multer from 'multer'
 import { z } from 'zod'
 import { query, withTx } from '../db.js'
 
@@ -10,7 +13,7 @@ const postSchema = z.object({
   department: z.string().optional().default(''),
   postType: z.enum(['Post', 'Announcement', 'Photo', 'File']).optional().default('Post'),
   content: z.string().min(1),
-  attachmentUrl: z.string().url().optional().nullable(),
+  attachmentUrl: z.string().min(1).optional().nullable(),
   attachmentName: z.string().optional().nullable(),
 })
 
@@ -22,6 +25,25 @@ const commentSchema = z.object({
 
 const likeSchema = z.object({
   actor: z.string().min(2),
+})
+
+const uploadDir = path.resolve(process.cwd(), 'uploads/intranet')
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+}
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase()
+    const safeExt = ext && ext.length <= 10 ? ext : ''
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`)
+  },
+})
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
 })
 
 function toUiPost(r) {
@@ -151,6 +173,30 @@ router.post('/posts', async (req, res, next) => {
     )
     const created = await fetchPostWithCounts(row.id)
     res.status(201).json({ ...created, thread: [] })
+  } catch (e) {
+    next(e)
+  }
+})
+
+router.post('/uploads', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded.' })
+      return
+    }
+    const isPhoto = (req.body?.kind || '').toLowerCase() === 'photo'
+    const mime = (req.file.mimetype || '').toLowerCase()
+    if (isPhoto && !mime.startsWith('image/')) {
+      res.status(400).json({ error: 'Please choose an image file for Photo.' })
+      return
+    }
+    const url = `/uploads/intranet/${req.file.filename}`
+    res.status(201).json({
+      url,
+      name: req.file.originalname || req.file.filename,
+      mime: req.file.mimetype || 'application/octet-stream',
+      size: req.file.size || 0,
+    })
   } catch (e) {
     next(e)
   }
