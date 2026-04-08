@@ -31,13 +31,36 @@ function seedPostsWithThreads() {
   })
 }
 
+const SEED_LIST = seedPostsWithThreads()
+const SEED_BY_ID = new Map(SEED_LIST.map((s) => [s.id, s]))
+
+/** Use fallback only when value is missing or not a finite number (fixes bad / legacy localStorage). */
+function finiteOr(value, fallback) {
+  if (value === null || value === undefined) return fallback
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function normalizePostId(id) {
+  if (typeof id === 'number' && Number.isFinite(id)) return id
+  const n = Number(id)
+  return Number.isFinite(n) ? n : id
+}
+
 function normalizePost(p) {
   if (!p || typeof p.id === 'undefined') return null
+  const id = normalizePostId(p.id)
+  const seed = SEED_BY_ID.get(id)
+  const thread = Array.isArray(p.thread) ? p.thread : []
+  const likes = finiteOr(p.likes, seed?.likes ?? 0)
+  const commentsRaw = finiteOr(p.comments, seed?.comments ?? thread.length)
+  const comments = Math.max(commentsRaw, thread.length)
   return {
     ...p,
-    thread: Array.isArray(p.thread) ? p.thread : [],
-    likes: typeof p.likes === 'number' ? p.likes : 0,
-    comments: typeof p.comments === 'number' ? p.comments : (Array.isArray(p.thread) ? p.thread.length : 0),
+    id,
+    thread,
+    likes,
+    comments,
   }
 }
 
@@ -47,7 +70,20 @@ function loadPersisted() {
     if (!raw) return null
     const data = JSON.parse(raw)
     if (!data || !Array.isArray(data.posts) || data.posts.length === 0) return null
-    const posts = data.posts.map(normalizePost).filter(Boolean)
+    let posts = data.posts.map(normalizePost).filter(Boolean)
+    /** One-time repair: older saves sometimes stored seed posts with 0 likes / empty threads. */
+    const needsRepair = !data.feedVersion || data.feedVersion < 2
+    if (needsRepair) {
+      posts = posts.map((p) => {
+        const seed = SEED_BY_ID.get(p.id)
+        if (!seed) return p
+        const thread = p.thread || []
+        if (thread.length === 0 && p.likes === 0 && p.comments === 0) {
+          return { ...p, likes: seed.likes, comments: seed.comments, thread: [...seed.thread] }
+        }
+        return p
+      })
+    }
     return { posts, liked: data.liked && typeof data.liked === 'object' ? data.liked : {} }
   } catch {
     return null
@@ -65,13 +101,13 @@ const initialState = {
 function reducer(state, action) {
   switch (action.type) {
     case 'TOGGLE_LIKE': {
-      const id = action.id
+      const id = normalizePostId(action.id)
       const was = !!state.liked[id]
       return {
         ...state,
         liked: { ...state.liked, [id]: !was },
         posts: state.posts.map((p) =>
-          p.id === id ? { ...p, likes: Math.max(0, p.likes + (was ? -1 : 1)) } : p
+          normalizePostId(p.id) === id ? { ...p, likes: Math.max(0, p.likes + (was ? -1 : 1)) } : p
         ),
       }
     }
@@ -95,7 +131,7 @@ function reducer(state, action) {
       return { ...state, posts: [newPost, ...state.posts] }
     }
     case 'TOGGLE_COMMENTS': {
-      const id = action.id
+      const id = normalizePostId(action.id)
       const open = !!state.expandedComments[id]
       return {
         ...state,
@@ -104,8 +140,9 @@ function reducer(state, action) {
     }
     case 'ADD_COMMENT': {
       const { postId, user, text } = action
+      const pid = normalizePostId(postId)
       const reply = {
-        id: `${postId}-c-${Date.now()}`,
+        id: `${pid}-c-${Date.now()}`,
         author: user.name,
         initials: user.initials,
         text,
@@ -114,7 +151,7 @@ function reducer(state, action) {
       return {
         ...state,
         posts: state.posts.map((p) => {
-          if (p.id !== postId) return p
+          if (normalizePostId(p.id) !== pid) return p
           const thread = [...(p.thread || []), reply]
           return {
             ...p,
@@ -151,6 +188,7 @@ export default function IntranetPage() {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
+          feedVersion: 2,
           posts: state.posts,
           liked: state.liked,
         })
@@ -176,15 +214,42 @@ export default function IntranetPage() {
     showToast('Your post was published to the feed.')
   }
 
+  const copyToClipboard = async (text) => {
+    try {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+    } catch {
+      /* HTTP / blocked clipboard */
+    }
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (ok) return true
+    } catch {
+      /* ignore */
+    }
+    return false
+  }
+
   const shareFeed = async (postId) => {
     const base = `${window.location.origin}${window.location.pathname}`
     const url = postId != null ? `${base}#post-${postId}` : base
-    try {
-      await navigator.clipboard.writeText(url)
-      showToast('Link copied to clipboard')
-    } catch {
-      window.prompt('Copy this link:', url)
+    const copied = await copyToClipboard(url)
+    if (copied) {
+      showToast('Link copied — paste it anywhere to share')
+      return
     }
+    window.prompt('Copy this link (Ctrl+C), then OK:', url)
+    showToast('Copy the link from the box above if your browser blocked auto-copy (common on HTTP).')
   }
 
   const submitComment = (postId) => {
