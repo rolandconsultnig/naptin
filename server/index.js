@@ -3,6 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import workbenchRoutes from './routes/workbench.js'
 import adminRbacRoutes from './routes/adminRbac.js'
+import intranetRoutes from './routes/intranet.js'
 import { pool } from './db.js'
 
 const app = express()
@@ -22,6 +23,7 @@ app.get('/api/v1/health', async (_req, res) => {
 
 app.use('/api/v1/workbench', workbenchRoutes)
 app.use('/api/v1/admin/rbac', adminRbacRoutes)
+app.use('/api/v1/intranet', intranetRoutes)
 
 app.use((err, _req, res, _next) => {
   console.error(err)

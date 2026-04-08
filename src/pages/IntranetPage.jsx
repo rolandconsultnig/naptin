@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { NAPTIN_LOGO } from '../assets/images'
 import { Heart, MessageCircle, Share2, Image, Paperclip, Megaphone, Send, Hash, TrendingUp } from 'lucide-react'
+import { intranetApi } from '../intranet/api'
 
 const STORAGE_KEY = 'naptin.intranet.feed.v1'
 
@@ -112,23 +113,19 @@ function reducer(state, action) {
       }
     }
     case 'ADD_POST': {
-      const { user, text } = action
-      const newPost = {
-        id: Date.now(),
-        author: user.name,
-        initials: user.initials,
-        dept: user.department,
-        time: 'Just now',
-        type: 'Post',
-        typeBg: 'bg-slate-50',
-        typeColor: 'text-slate-600',
-        avatarBg: 'bg-[#006838]',
-        content: text,
-        likes: 0,
-        comments: 0,
-        thread: [],
+      return { ...state, posts: [normalizePost(action.post), ...state.posts] }
+    }
+    case 'REPLACE_POSTS': {
+      const posts = (action.posts || []).map(normalizePost).filter(Boolean)
+      return { ...state, posts }
+    }
+    case 'SET_LIKE_RESULT': {
+      const id = normalizePostId(action.id)
+      return {
+        ...state,
+        liked: { ...state.liked, [id]: !!action.liked },
+        posts: state.posts.map((p) => (normalizePostId(p.id) === id ? { ...p, likes: Number(action.likes || 0) } : p)),
       }
-      return { ...state, posts: [newPost, ...state.posts] }
     }
     case 'TOGGLE_COMMENTS': {
       const id = normalizePostId(action.id)
@@ -139,24 +136,17 @@ function reducer(state, action) {
       }
     }
     case 'ADD_COMMENT': {
-      const { postId, user, text } = action
+      const { postId, comment, comments } = action
       const pid = normalizePostId(postId)
-      const reply = {
-        id: `${pid}-c-${Date.now()}`,
-        author: user.name,
-        initials: user.initials,
-        text,
-        time: 'Just now',
-      }
       return {
         ...state,
         posts: state.posts.map((p) => {
           if (normalizePostId(p.id) !== pid) return p
-          const thread = [...(p.thread || []), reply]
+          const thread = [...(p.thread || []), comment]
           return {
             ...p,
             thread,
-            comments: thread.length,
+            comments: Number(comments || thread.length),
           }
         }),
       }
@@ -182,6 +172,10 @@ export default function IntranetPage() {
   const [newPost, setNewPost] = useState('')
   const [commentDrafts, setCommentDrafts] = useState({})
   const [toast, setToast] = useState('')
+  const [postType, setPostType] = useState('Post')
+  const [attachmentUrl, setAttachmentUrl] = useState('')
+  const [attachmentName, setAttachmentName] = useState('')
+  const [loadingFeed, setLoadingFeed] = useState(false)
 
   useEffect(() => {
     try {
@@ -198,20 +192,87 @@ export default function IntranetPage() {
     }
   }, [state.posts, state.liked])
 
+  useEffect(() => {
+    let live = true
+    const run = async () => {
+      setLoadingFeed(true)
+      try {
+        const apiPosts = await intranetApi.posts()
+        if (!live) return
+        if (Array.isArray(apiPosts) && apiPosts.length > 0) {
+          dispatch({ type: 'REPLACE_POSTS', posts: apiPosts })
+        }
+      } catch {
+        showToast('Using local feed cache. API sync unavailable.')
+      } finally {
+        if (live) setLoadingFeed(false)
+      }
+    }
+    run()
+    return () => {
+      live = false
+    }
+  }, [])
+
   const showToast = (msg) => {
     setToast(msg)
     window.setTimeout(() => setToast(''), 2500)
   }
 
-  const submitPost = () => {
+  const postTypes = {
+    Post: { label: 'Post', icon: Send },
+    Photo: { label: 'Photo', icon: Image },
+    File: { label: 'File', icon: Paperclip },
+    Announcement: { label: 'Announce', icon: Megaphone },
+  }
+
+  const onPickType = (type) => {
+    setPostType(type)
+    if (type === 'Photo') {
+      const url = window.prompt('Photo URL (https://...):', attachmentUrl || '')
+      if (url != null) setAttachmentUrl(url.trim())
+      const name = window.prompt('Photo caption / filename (optional):', attachmentName || '')
+      if (name != null) setAttachmentName(name.trim())
+      return
+    }
+    if (type === 'File') {
+      const url = window.prompt('File URL (https://...):', attachmentUrl || '')
+      if (url != null) setAttachmentUrl(url.trim())
+      const name = window.prompt('File name (optional):', attachmentName || '')
+      if (name != null) setAttachmentName(name.trim())
+      return
+    }
+    if (type === 'Announcement') {
+      setAttachmentUrl('')
+      setAttachmentName('')
+    }
+  }
+
+  const submitPost = async () => {
     if (!user?.name) {
       showToast('Please sign in to post.')
       return
     }
     if (!newPost.trim()) return
-    dispatch({ type: 'ADD_POST', user, text: newPost.trim() })
-    setNewPost('')
-    showToast('Your post was published to the feed.')
+    try {
+      const created = await intranetApi.createPost({
+        author: user.name,
+        initials: user.initials || 'NA',
+        department: user.department || '',
+        postType,
+        content: newPost.trim(),
+        attachmentUrl: attachmentUrl || null,
+        attachmentName: attachmentName || null,
+      })
+      dispatch({ type: 'ADD_POST', post: created })
+      setNewPost('')
+      setPostType('Post')
+      setAttachmentUrl('')
+      setAttachmentName('')
+      showToast('Your post was published to the feed.')
+    } catch {
+      showToast('Could not publish post. Check API/DB connection.')
+    }
   }
 
   const copyToClipboard = async (text) => {
@@ -252,14 +313,49 @@ export default function IntranetPage() {
     showToast('Copy the link from the box above if your browser blocked auto-copy (common on HTTP).')
   }
 
-  const submitComment = (postId) => {
+  const submitComment = async (postId) => {
     const text = (commentDrafts[postId] || '').trim()
     if (!text || !user?.name) {
       showToast(user ? 'Write a comment first.' : 'Please sign in to comment.')
       return
     }
-    dispatch({ type: 'ADD_COMMENT', postId, user, text })
-    setCommentDrafts((d) => ({ ...d, [postId]: '' }))
+    try {
+      const data = await intranetApi.addComment(postId, {
+        author: user.name,
+        initials: user.initials || 'NA',
+        text,
+      })
+      dispatch({ type: 'ADD_COMMENT', postId, comment: data.comment, comments: data.comments })
+      setCommentDrafts((d) => ({ ...d, [postId]: '' }))
+    } catch {
+      showToast('Could not add comment right now.')
+    }
+  }
+
+  const onToggleLike = async (postId) => {
+    if (!user?.name) {
+      showToast('Please sign in to like posts.')
+      return
+    }
+    try {
+      const data = await intranetApi.toggleLike(postId, { actor: user.name })
+      dispatch({ type: 'SET_LIKE_RESULT', id: postId, liked: data.liked, likes: data.likes })
+    } catch {
+      showToast('Like update failed. Please retry.')
+    }
+  }
+
+  const getTypeChip = (type) => {
+    switch (type) {
+      case 'Announcement':
+        return { typeBg: 'bg-[#006838]/10', typeColor: 'text-[#006838]', avatarBg: 'bg-[#006838]' }
+      case 'Photo':
+        return { typeBg: 'bg-blue-50', typeColor: 'text-blue-700', avatarBg: 'bg-blue-600' }
+      case 'File':
+        return { typeBg: 'bg-amber-50', typeColor: 'text-amber-700', avatarBg: 'bg-amber-500' }
+      default:
+        return { typeBg: 'bg-slate-50', typeColor: 'text-slate-600', avatarBg: 'bg-[#006838]' }
+    }
   }
 
   return (
@@ -295,42 +391,55 @@ export default function IntranetPage() {
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
-                {[
-                  { icon: Image, label: 'Photo' },
-                  { icon: Paperclip, label: 'File' },
-                  { icon: Megaphone, label: 'Announce' },
-                ].map(({ icon: Icon, label }, i) => (
+                {Object.entries(postTypes).map(([type, cfg], i) => {
+                  const Icon = cfg.icon
+                  const active = postType === type
+                  return (
                   <button
                     key={i}
                     type="button"
-                    onClick={() => showToast(`${label}: attach flow coming in a future update.`)}
-                    className="flex items-center gap-1.5 text-slate-400 hover:text-[#006838] text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+                    onClick={() => onPickType(type)}
+                    className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors ${
+                      active
+                        ? 'text-[#006838] bg-green-50'
+                        : 'text-slate-400 hover:text-[#006838] hover:bg-green-50'
+                    }`}
                   >
                     <Icon size={13} />
-                    {label}
+                    {cfg.label}
                   </button>
-                ))}
+                )})}
               </div>
               <button type="button" onClick={submitPost} className="btn-primary text-sm py-2 px-4">
                 <Send size={13} />
                 Post
               </button>
             </div>
+            {(attachmentUrl || attachmentName || postType !== 'Post') && (
+              <div className="mt-2 text-[11px] text-slate-500">
+                {postType} {attachmentName ? `- ${attachmentName}` : ''} {attachmentUrl ? '(link attached)' : ''}
+              </div>
+            )}
           </div>
+
+          {loadingFeed && <div className="text-xs text-slate-400 px-1">Syncing feed from server...</div>}
 
           {posts.map((post) => (
             <article key={post.id} id={`post-${post.id}`} className="card scroll-mt-24">
+              {(() => {
+                const theme = getTypeChip(post.type)
+                return (
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-full ${post.avatarBg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}
+                    className={`w-10 h-10 rounded-full ${post.avatarBg || theme.avatarBg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}
                   >
                     {post.initials}
                   </div>
                   <div>
                     <p className="text-sm font-bold text-slate-800">{post.author}</p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${post.typeBg} ${post.typeColor}`}>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${post.typeBg || theme.typeBg} ${post.typeColor || theme.typeColor}`}>
                         {post.type}
                       </span>
                       <span className="text-[10px] text-slate-400">{post.time}</span>
@@ -339,16 +448,28 @@ export default function IntranetPage() {
                   </div>
                 </div>
               </div>
+              )})()}
               <p className="text-sm text-slate-700 leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
-              {post.image && (
+              {post.type === 'Photo' && post.attachmentUrl && (
+                <a href={post.attachmentUrl} target="_blank" rel="noreferrer" className="block mb-3">
+                  <img src={post.attachmentUrl} alt={post.attachmentName || 'Photo attachment'} className="w-full rounded-xl max-h-80 object-cover border border-slate-100" />
+                </a>
+              )}
+              {post.image && !post.attachmentUrl && (
                 <div className="bg-gradient-to-br from-slate-100 to-slate-50 rounded-xl h-36 flex items-center justify-center mb-3 border border-slate-100">
                   <span className="text-slate-400 text-sm font-medium">📷 Training Schedule — Q2 2026</span>
                 </div>
               )}
+              {post.type === 'File' && post.attachmentUrl && (
+                <a href={post.attachmentUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 hover:text-[#006838]">
+                  <Paperclip size={13} />
+                  {post.attachmentName || 'Open attached file'}
+                </a>
+              )}
               <div className="flex items-center gap-4 pt-3 border-t border-slate-50 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => dispatch({ type: 'TOGGLE_LIKE', id: post.id })}
+                  onClick={() => onToggleLike(post.id)}
                   className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${
                     liked[post.id] ? 'text-red-500' : 'text-slate-400 hover:text-red-400'
                   }`}

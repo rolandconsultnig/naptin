@@ -195,3 +195,32 @@ CREATE TABLE IF NOT EXISTS wb_approval_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS intranet_posts (
+  id SERIAL PRIMARY KEY,
+  author TEXT NOT NULL,
+  initials TEXT NOT NULL,
+  department TEXT,
+  post_type TEXT NOT NULL DEFAULT 'Post',
+  content TEXT NOT NULL,
+  attachment_url TEXT,
+  attachment_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS intranet_comments (
+  id SERIAL PRIMARY KEY,
+  post_id INT NOT NULL REFERENCES intranet_posts(id) ON DELETE CASCADE,
+  author TEXT NOT NULL,
+  initials TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS intranet_post_likes (
+  id SERIAL PRIMARY KEY,
+  post_id INT NOT NULL REFERENCES intranet_posts(id) ON DELETE CASCADE,
+  actor TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(post_id, actor)
+);
+
