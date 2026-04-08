@@ -1,6 +1,14 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_WORKBENCH_API_URL || 'http://localhost:4002/api/v1'
+function resolveApiBase() {
+  if (import.meta.env.VITE_WORKBENCH_API_URL) return import.meta.env.VITE_WORKBENCH_API_URL
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:4002/api/v1`
+  }
+  return 'http://localhost:4002/api/v1'
+}
+
+const baseURL = resolveApiBase()
 
 const http = axios.create({
   baseURL,
