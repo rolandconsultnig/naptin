@@ -1,9 +1,12 @@
 import { Pool } from 'pg'
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/naptin_portal'
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Create a .env file — see .env.example.')
+  process.exit(1)
+}
 
 export const pool = new Pool({
-  connectionString,
+  connectionString: process.env.DATABASE_URL,
 })
 
 export async function query(text, params = []) {

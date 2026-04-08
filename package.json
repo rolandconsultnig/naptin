@@ -14,7 +14,7 @@
     "db:rbac:schema": "npm run db:apply -- server/rbac_schema.sql",
     "db:rbac:seed": "npm run db:apply -- server/rbac_seed.sql",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --port 4001 --host",
     "smoke:hrms:slice4": "node scripts/hrms-slice4-smoke.mjs"
   },
   "dependencies": {
@@ -22,6 +22,7 @@
     "clsx": "^2.1.0",
     "cors": "^2.8.6",
     "date-fns": "^3.4.0",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "lucide-react": "^0.363.0",
     "pg": "^8.20.0",

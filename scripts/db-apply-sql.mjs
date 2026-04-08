@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import fs from 'fs'
 import path from 'path'
 import { Pool } from 'pg'
@@ -20,8 +21,15 @@ if (!sql.trim()) {
   process.exit(1)
 }
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/naptin_portal'
-const pool = new Pool({ connectionString })
+if (!process.env.DATABASE_URL?.trim()) {
+  console.error('DATABASE_URL is not set.')
+  console.error('Create /opt/naptin/app/.env (or copy .env.example) with:')
+  console.error('  DATABASE_URL=postgresql://naptin_app:YOUR_PASSWORD@127.0.0.1:5432/naptin_portal')
+  console.error('Use the same user/password you created in PostgreSQL — not necessarily user "postgres".')
+  process.exit(1)
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 try {
   await pool.query(sql)

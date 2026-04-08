@@ -94,5 +94,12 @@ export default defineConfig(({ mode }) => {
       port: 4001,
       ...(chatProxy ? { proxy: chatProxy } : {}),
     },
+    /** Production static server: `npm run preview` / PM2 `naptin-web` — browser hits port 4001 */
+    preview: {
+      port: 4001,
+      strictPort: true,
+      host: true,
+      ...(chatProxy ? { proxy: chatProxy } : {}),
+    },
   }
 })
