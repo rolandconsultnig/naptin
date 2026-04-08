@@ -5,6 +5,7 @@
  * so the browser does not hit self-signed `https://localhost:4003` directly.
  *
  * - **VITE_CHAT_API_URL** / **VITE_CHAT_SOCKET_URL** — bypass proxy; talk to backend directly
+ *   (required if chat is same-origin via Nginx; otherwise non-localhost defaults to **:4003** on this host)
  * - **VITE_CHAT_USE_VITE_PROXY=0** — disable proxy in dev (direct :4003)
  * - **VITE_CHAT_BACKEND_PROTOCOL** — `http` | `https` for the proxy **target** in `vite.config.js`
  * - **VITE_CHAT_OFFLINE=1** — no network: roster from STAFF mock, session-local messages only
@@ -38,6 +39,13 @@ export function getSocketIoClientOptions() {
   return {}
 }
 
+/** When UI is on :4001 (vite preview) or another port, chat still runs on :4003 unless Nginx same-origin — then set VITE_CHAT_* */
+function publicChatOrigin() {
+  const hostname = window.location.hostname
+  const protocol = window.location.protocol || 'http:'
+  return `${protocol}//${hostname}:4003`
+}
+
 export function getApiBase() {
   const fromEnv = import.meta.env.VITE_CHAT_API_URL
   if (fromEnv) return String(fromEnv).replace(/\/$/, '')
@@ -46,7 +54,9 @@ export function getApiBase() {
     return `${window.location.origin}/proxy-chat-api`
   }
 
-  if (!isLocalDevHost()) return `${window.location.origin}/api`
+  if (!isLocalDevHost()) {
+    return `${publicChatOrigin()}/api`
+  }
 
   const hostname = window.location.hostname
   const protocol = chatBackendProtocol()
@@ -61,7 +71,9 @@ export function getSocketUrl() {
     return window.location.origin
   }
 
-  if (!isLocalDevHost()) return window.location.origin
+  if (!isLocalDevHost()) {
+    return publicChatOrigin()
+  }
 
   const hostname = window.location.hostname
   const protocol = chatBackendProtocol()
