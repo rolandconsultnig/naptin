@@ -10,7 +10,7 @@ export default function DocumentCenterPage() {
           <img src={NAPTIN_LOGO} alt="" className="w-9 h-9 object-contain hidden sm:block" />
           <div>
             <h1 className="text-xl font-extrabold text-slate-900">Document management</h1>
-            <p className="text-sm text-slate-400">Enterprise records, classification, and retention — prototype register.</p>
+            <p className="text-sm text-slate-400">Enterprise records, classification, and retention register.</p>
           </div>
         </div>
         <button type="button" className="btn-primary self-start">

@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { NAPTIN_LOGO } from '../../assets/images'
 import { FINANCE_NAV } from '../../data/financeAccounting'
 import { FinanceProvider } from '../../context/FinanceContext'
@@ -6,6 +7,7 @@ import { FinanceProvider } from '../../context/FinanceContext'
 export default function FinanceLayout() {
   return (
     <FinanceProvider>
+    <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
     <div className="animate-fade-up space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <img src={NAPTIN_LOGO} alt="" className="w-9 h-9 object-contain hidden sm:block" />

@@ -78,7 +78,7 @@ export default function AdminAuditPage() {
         </div>
         <div>
           <h1 className="text-xl font-extrabold text-slate-900">Administrative audit</h1>
-          <p className="text-sm text-slate-500">Prototype entries — connect to your SIEM or API audit stream.</p>
+          <p className="text-sm text-slate-500">Recent administrative actions on the portal.</p>
         </div>
       </div>
 

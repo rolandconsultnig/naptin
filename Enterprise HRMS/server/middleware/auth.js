@@ -52,18 +52,27 @@ const canAccessEmployee = async (req, res, next) => {
       return next();
     }
 
+
     // Managers can access their direct reports
     if (req.user.role === 'Manager') {
-      // TODO: Implement manager-employee relationship check
-      // For now, allow access
-      return next();
+      // Check if the employee's managerId matches the manager's userId
+      const employee = await require('../models/Employee').findByPk(employeeId);
+      if (employee && employee.managerId && employee.managerId === req.user.userId) {
+        return next();
+      } else {
+        return res.status(403).json({ error: 'Managers can only access their direct reports' });
+      }
     }
 
     // Employees can only access their own data
     if (req.user.role === 'Employee') {
-      // TODO: Implement employee self-access check
-      // For now, allow access
-      return next();
+      // Check if the employeeId matches the user's employee record
+      const employee = await require('../models/Employee').findByPk(employeeId);
+      if (employee && employee.id === req.user.employeeId) {
+        return next();
+      } else {
+        return res.status(403).json({ error: 'Employees can only access their own data' });
+      }
     }
 
     res.status(403).json({ error: 'Access denied' });

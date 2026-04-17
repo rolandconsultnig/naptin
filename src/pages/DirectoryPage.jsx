@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { NAPTIN_LOGO } from '../assets/images'
 import { STAFF } from '../data/mock'
 import { Search, Mail, Building2, Hash } from 'lucide-react'
+import { hrmsApi } from '../services/hrmsService'
 
 const BADGE_COLORS = ['bg-[#006838]', 'bg-blue-600', 'bg-purple-600', 'bg-amber-600', 'bg-rose-600']
 
@@ -21,16 +22,17 @@ function toStatus(employmentStatus = '') {
 }
 
 function mapEmployeeToCard(e, index, managerLookup = {}) {
-  const managerName = managerLookup[e.id] || e.manager_name || 'Unassigned'
+  const fullName = e.full_name || e.name || [e.firstName, e.lastName].filter(Boolean).join(' ')
+  const managerName = managerLookup[e.id] || e.manager_name || e.supervisorName || 'Unassigned'
   return {
-    id: e.employee_number || `EMP-${e.id}`,
-    name: e.full_name || 'Unknown Employee',
-    initials: toInitials(e.full_name),
-    role: e.job_title || 'Staff',
-    dept: e.department || 'HR',
+    id: e.employee_number || e.employeeId || `EMP-${e.id}`,
+    name: fullName || 'Unknown Employee',
+    initials: toInitials(fullName),
+    role: e.job_title || e.positionTitle || 'Staff',
+    dept: e.department || e.departmentName || 'HR',
     email: e.email || '—',
-    grade: e.employment_status || 'active',
-    status: toStatus(e.employment_status),
+    grade: e.grade_level || e.gradeLevel || e.employment_status || 'active',
+    status: toStatus(e.employment_status || e.employmentStatus),
     manager: managerName,
     color: BADGE_COLORS[index % BADGE_COLORS.length],
   }
@@ -46,36 +48,18 @@ export default function DirectoryPage() {
   const loadDirectory = async () => {
     setIsLoading(true)
     try {
-      const [employeesRes, orgRes] = await Promise.all([
-        fetch('/api/hrms/employees', { credentials: 'include' }),
-        fetch('/api/hrms/org-chart', { credentials: 'include' }),
-      ])
-
-      const employeesText = await employeesRes.text()
-      const employeesData = employeesText ? JSON.parse(employeesText) : {}
-      if (!employeesRes.ok) throw new Error(employeesData?.error || `Request failed: ${employeesRes.status}`)
-
-      const orgText = await orgRes.text()
-      const orgData = orgText ? JSON.parse(orgText) : {}
-
-      const managerLookup = {}
-      for (const managerGroup of orgData.managers || []) {
-        for (const report of managerGroup.direct_reports || []) {
-          managerLookup[report.id] = managerGroup.manager_name
-        }
-      }
-
-      const items = Array.isArray(employeesData.items) ? employeesData.items : []
+      const employeesData = await hrmsApi.getEmployees({ limit: 200 })
+      const items = Array.isArray(employeesData?.employees) ? employeesData.employees : []
       if (!items.length) {
         setRows(STAFF)
-        setNote('No HRMS records found. Showing demo directory.')
+        setNote('No HRMS records found. Showing sample directory.')
       } else {
-        setRows(items.map((item, i) => mapEmployeeToCard(item, i, managerLookup)))
-        setNote('Synced from HRMS org directory.')
+        setRows(items.map((item, i) => mapEmployeeToCard(item, i, {})))
+        setNote('Synced from HRMS API (same client as workbench).')
       }
     } catch {
       setRows(STAFF)
-      setNote('HRMS directory API unavailable. Showing demo data.')
+      setNote('Directory is temporarily unavailable. Showing saved sample listings.')
     } finally {
       setIsLoading(false)
     }
@@ -116,7 +100,7 @@ export default function DirectoryPage() {
         <img src={NAPTIN_LOGO} alt="" className="w-9 h-9 object-contain hidden sm:block" />
         <div>
           <h1 className="text-xl font-extrabold text-slate-900">Organisation directory</h1>
-          <p className="text-sm text-slate-400">Centralised people search — prototype data; integrate LDAP / HRIS for production.</p>
+          <p className="text-sm text-slate-400">Search people, roles, and units across the organisation.</p>
         </div>
       </div>
 

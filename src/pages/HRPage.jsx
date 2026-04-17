@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NAPTIN_LOGO } from '../assets/images'
 import { STAFF } from '../data/mock'
 import { Users, UserPlus, TrendingUp, Briefcase, Search, Filter, MoreHorizontal, Eye, X } from 'lucide-react'
+import { hrmsApi } from '../services/hrmsService'
 
 const StatusBadge = ({ status }) => {
   const map = { active:'badge-green', leave:'badge-amber', probation:'badge-blue', pending:'badge-red' }
@@ -28,19 +29,42 @@ function toStatus(employmentStatus = '') {
 }
 
 function mapEmployeeToStaff(e, index) {
+  const fullName = e.full_name || e.name || [e.firstName, e.lastName].filter(Boolean).join(' ')
   return {
     recordId: e.id || null,
-    id: e.employee_number || `EMP-${e.id}`,
-    name: e.full_name || 'Unknown Employee',
-    initials: toInitials(e.full_name),
+    id: e.employee_number || e.employeeId || `EMP-${e.id}`,
+    name: fullName || 'Unknown Employee',
+    initials: toInitials(fullName),
     email: e.email || '—',
-    dept: e.department || 'HR',
-    role: e.job_title || 'Staff',
-    grade: e.employment_status || 'active',
-    status: toStatus(e.employment_status),
-    joined: e.hire_date || '—',
+    dept: e.department || e.departmentName || 'HR',
+    role: e.job_title || e.positionTitle || 'Staff',
+    grade: e.grade_level || e.gradeLevel || e.employmentStatus || 'active',
+    status: toStatus(e.employment_status || e.employmentStatus),
+    joined: e.hire_date || e.dateOfFirstAppointment || '—',
     color: BADGE_COLORS[index % BADGE_COLORS.length],
   }
+}
+
+const DEPT_CODE_BY_LABEL = {
+  HR: 'ADMIN',
+  Finance: 'FIN',
+  ICT: 'ICT',
+  Legal: 'LEGAL',
+  Procurement: 'PROC',
+  'M&E': 'OPS',
+  Training: 'TRNG',
+  Admin: 'ADMIN',
+  'Corporate Services': 'ADMIN',
+}
+
+function countOrgHeads(nodes) {
+  if (!Array.isArray(nodes)) return 0
+  let n = 0
+  for (const node of nodes) {
+    if (node.headName) n += 1
+    n += countOrgHeads(node.children)
+  }
+  return n
 }
 
 export default function HRPage() {
@@ -71,22 +95,18 @@ export default function HRPage() {
   const loadEmployees = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/hrms/employees', { credentials: 'include' })
-      const text = await response.text()
-      const data = text ? JSON.parse(text) : {}
-      if (!response.ok) throw new Error(data?.error || `Request failed: ${response.status}`)
-
-      const items = Array.isArray(data.items) ? data.items : []
+      const data = await hrmsApi.getEmployees({ limit: 400 })
+      const items = Array.isArray(data?.employees) ? data.employees : []
       if (!items.length) {
         setStaffRows(STAFF)
-        setSyncNote('No employee records yet. Showing demo data.')
+        setSyncNote('No employee records yet. Showing sample listings.')
       } else {
         setStaffRows(items.map(mapEmployeeToStaff))
-        setSyncNote('Synced from HRMS employee records.')
+        setSyncNote('Synced from HRMS API.')
       }
     } catch {
       setStaffRows(STAFF)
-      setSyncNote('HRMS API unavailable. Showing demo staff list.')
+      setSyncNote('HRMS is temporarily unavailable. Showing sample staff list.')
     } finally {
       setIsLoading(false)
     }
@@ -100,17 +120,11 @@ export default function HRPage() {
 
     setIsUpdatingStaff(true)
     try {
-      const response = await fetch(`/api/hrms/employees/${employee.recordId}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employment_status: nextStatus }),
-      })
-      const text = await response.text()
-      const data = text ? JSON.parse(text) : {}
-      if (!response.ok) throw new Error(data?.error || `Request failed: ${response.status}`)
+      const apiStatus =
+        nextStatus === 'leave' ? 'on_leave' : nextStatus === 'probation' ? 'active' : 'active'
+      await hrmsApi.updateEmployee(employee.recordId, { employmentStatus: apiStatus })
 
-      setSelected((prev) => (prev ? { ...prev, status: toStatus(nextStatus), grade: nextStatus } : prev))
+      setSelected((prev) => (prev ? { ...prev, status: toStatus(apiStatus), grade: apiStatus } : prev))
       setSyncNote('Employee status updated successfully.')
       await Promise.all([loadEmployees(), loadHrSummary()])
     } catch (err) {
@@ -122,24 +136,26 @@ export default function HRPage() {
 
   const loadHrSummary = async () => {
     try {
-      const [summaryRes, orgRes] = await Promise.all([
-        fetch('/api/hrms/summary', { credentials: 'include' }),
-        fetch('/api/hrms/org-chart', { credentials: 'include' }),
+      const [empData, jobs, tree] = await Promise.all([
+        hrmsApi.getEmployees({ limit: 500 }),
+        hrmsApi.getJobOpenings({ status: 'open' }).catch(() => []),
+        hrmsApi.getOrgChart().catch(() => []),
       ])
-
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json()
-        setSummary(summaryData.summary || null)
-      } else {
+      const emps = empData?.employees || []
+      if (!emps.length) {
         setSummary(null)
-      }
-
-      if (orgRes.ok) {
-        const orgData = await orgRes.json()
-        setOrgManagers((orgData.managers || []).filter((m) => m.manager_name !== 'Unassigned').length)
-      } else {
         setOrgManagers(0)
+        return
       }
+      const active = emps.filter((e) => String(e.employmentStatus || '').toLowerCase() === 'active').length
+      const leave = emps.filter((e) => String(e.employmentStatus || '').toLowerCase() === 'on_leave').length
+      setSummary({
+        active_employees: active,
+        leave_employees: leave,
+        total_employees: empData.total ?? emps.length,
+        open_jobs: Array.isArray(jobs) ? jobs.length : 0,
+      })
+      setOrgManagers(countOrgHeads(tree))
     } catch {
       setSummary(null)
       setOrgManagers(0)
@@ -152,24 +168,26 @@ export default function HRPage() {
 
     setIsCreatingStaff(true)
     try {
-      const employeeNumber = `EMP-${Date.now()}`
-      const response = await fetch('/api/hrms/employees', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          employee_number: employeeNumber,
-          full_name: newStaffName.trim(),
-          email: newStaffEmail.trim() || undefined,
-          department: newStaffDept,
-          job_title: newStaffRole,
-          employment_status: newStaffStatus,
-        }),
-      })
+      const employeeNumber = `NAPTIN/PORTAL/${Date.now()}`
+      const parts = newStaffName.trim().split(/\s+/).filter(Boolean)
+      const firstName = parts[0] || 'Staff'
+      const lastName = parts.slice(1).join(' ') || firstName
+      const email =
+        newStaffEmail.trim() ||
+        `portal.user.${Date.now()}@naptin.gov.ng`
+      const depts = await hrmsApi.getDepartments().catch(() => [])
+      const code = DEPT_CODE_BY_LABEL[newStaffDept] || 'ADMIN'
+      const deptRow = Array.isArray(depts) ? depts.find((d) => d.code === code) : null
 
-      const text = await response.text()
-      const data = text ? JSON.parse(text) : {}
-      if (!response.ok) throw new Error(data?.error || `Request failed: ${response.status}`)
+      await hrmsApi.createEmployee({
+        employeeId: employeeNumber,
+        firstName,
+        lastName,
+        email,
+        departmentId: deptRow?.id ?? null,
+        employmentStatus: newStaffStatus === 'leave' ? 'on_leave' : 'active',
+        employmentType: 'permanent',
+      })
 
       setNewStaffName('')
       setNewStaffEmail('')

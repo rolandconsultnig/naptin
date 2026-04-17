@@ -135,6 +135,7 @@ export const FINANCE_NAV = [
   { to: 'currency', label: 'Multi-currency' },
   { to: 'fixed-assets', label: 'Fixed assets' },
   { to: 'expenses', label: 'Expenses' },
+  { to: 'cash-advances', label: 'Cash Advances' },
   { to: 'cash-flow', label: 'Cash & liquidity' },
   { to: 'projects', label: 'Project accounting' },
   { to: 'tax', label: 'Tax engine' },

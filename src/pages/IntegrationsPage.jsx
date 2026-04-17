@@ -15,7 +15,7 @@ export default function IntegrationsPage() {
         <img src={NAPTIN_LOGO} alt="" className="w-9 h-9 object-contain hidden sm:block" />
         <div>
           <h1 className="text-xl font-extrabold text-slate-900">Integrations</h1>
-          <p className="text-sm text-slate-400">CRM, ERP, identity, and analytics connectors — UI prototype; configure secrets & scopes in a secure vault.</p>
+          <p className="text-sm text-slate-400">CRM, ERP, identity, and analytics connectors — status and ownership at a glance.</p>
         </div>
       </div>
 
@@ -34,7 +34,7 @@ export default function IntegrationsPage() {
               <p className="text-[10px] font-semibold text-[#006838] mb-1">{c.type}</p>
               <p className="text-xs text-slate-500 leading-relaxed">{c.desc}</p>
               <button type="button" className="text-xs font-bold text-[#006838] mt-3 hover:underline">
-                Configure (mock)
+                Configure
               </button>
             </div>
           </div>

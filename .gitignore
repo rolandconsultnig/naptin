@@ -24,6 +24,9 @@ __pycache__/
 venv/
 dev/venv/
 
+# Capacitor iOS (add on macOS: `npx cap add ios`)
+ios/
+
 # IDE
 .idea/
 *.swp

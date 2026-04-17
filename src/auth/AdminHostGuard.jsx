@@ -22,9 +22,8 @@ export default function AdminHostGuard({ children }) {
         {port}
       </p>
       <p className="text-xs text-slate-500 mb-6 max-w-sm">
-        Use <span className="font-mono text-slate-400">http://127.0.0.1{port}/admin</span> in development, or set{' '}
-        <span className="font-mono">VITE_ADMIN_DISABLE_HOST_CHECK=true</span> /{' '}
-        <span className="font-mono">VITE_ADMIN_ALLOWED_HOSTS</span> for controlled deployments.
+        In development, open the admin console at <span className="font-mono text-slate-400">http://127.0.0.1{port}/admin</span>.
+        Production access is limited to hosts approved by your ICT team.
       </p>
       <Link to="/app/dashboard" className="text-sm font-bold text-[#4ade80] hover:underline">
         ← Back to portal

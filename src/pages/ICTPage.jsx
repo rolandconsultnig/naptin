@@ -6,9 +6,91 @@ import {
   Search, RefreshCw, ChevronDown, ChevronRight,
   Lock, Eye, X,
 } from 'lucide-react'
+import useFetch from '../hooks/useFetch'
+import useMutation from '../hooks/useMutation'
+import { ictApi } from '../services/ictService'
+import { format, parseISO } from 'date-fns'
 
-// ── local ICT mock data ────────────────────────────────────────
-const ALL_TICKETS = [
+// ─── Field normalizers ─────────────────────────────────────────
+const PRIO_MAP = { critical: 'P1', high: 'P2', medium: 'P3', low: 'P4' }
+const STAT_API_TO_UI = {
+  open: 'Queued', in_progress: 'In Progress',
+  resolved: 'Resolved', closed: 'Completed',
+}
+const SYS_HEALTH_MAP = { healthy: 'operational', degraded: 'degraded', down: 'incident' }
+
+function computeSlaLabel(deadline) {
+  if (!deadline) return '—'
+  const diff = new Date(deadline) - Date.now()
+  if (diff < 0) return 'Breached'
+  const h = Math.ceil(diff / 3600000)
+  return h < 24 ? `${h}h` : `${Math.ceil(h / 24)}d`
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—'
+  try { return format(parseISO(iso), 'dd MMM yyyy') } catch { return iso.slice(0, 10) }
+}
+
+function normalizeTicket(t) {
+  return {
+    _id:      t.id,
+    id:       t.ticketNo,
+    title:    t.title,
+    description: t.description || '',
+    category: t.category ? (t.category.charAt(0).toUpperCase() + t.category.slice(1)) : 'Other',
+    priority: PRIO_MAP[t.priority] || 'P3',
+    status:   STAT_API_TO_UI[t.status] || 'Queued',
+    assignee: t.assignedTo || 'Unassigned',
+    raised:   fmtDate(t.createdAt),
+    sla:      computeSlaLabel(t.slaDeadline),
+  }
+}
+
+function normalizeSystem(s) {
+  return {
+    name:      s.name,
+    status:    SYS_HEALTH_MAP[s.healthStatus] || 'operational',
+    uptime:    s.uptime != null ? `${s.uptime}%` : '—',
+    lastCheck: s.lastChecked ? fmtDate(s.lastChecked) : '—',
+    host:      s.url || s.description || '—',
+    db:        s.systemType || 'system',
+  }
+}
+
+function normalizeAsset(a) {
+  return {
+    tag:      a.assetTag,
+    type:     a.category ? (a.category.charAt(0).toUpperCase() + a.category.slice(1)) : 'Device',
+    make:     [a.manufacturer, a.model].filter(Boolean).join(' ') || a.name,
+    user:     a.assignedTo ? `${a.assignedTo}${a.department ? ' — ' + a.department : ''}` : 'Unassigned',
+    dept:     a.department || '—',
+    status:   a.status === 'active' ? 'Active' : a.status === 'retired' ? 'Fault' : 'Available',
+    warranty: a.warrantyExpiry ? fmtDate(a.warrantyExpiry) : '—',
+  }
+}
+
+function normalizeChange(c) {
+  const riskCap = c.risk ? c.risk.charAt(0).toUpperCase() + c.risk.slice(1) : 'Low'
+  const cats = { emergency: 'Major', standard: 'Normal', normal: 'Normal', minor: 'Minor', major: 'Major' }
+  const statMap = {
+    pending: 'Scheduled', approved: 'Approved',
+    in_progress: 'In Progress', completed: 'Completed',
+  }
+  return {
+    ref:    c.crNumber,
+    title:  c.title,
+    type:   cats[c.category] || 'Normal',
+    risk:   riskCap,
+    status: statMap[c.status] || c.status,
+    date:   c.scheduledDate ? fmtDate(c.scheduledDate) : '—',
+    owner:  c.assignedTo || c.requestedBy || '—',
+  }
+}
+
+// ─── Retained display maps ──────────────────────────────────────
+// (kept below so the render JSX is untouched)
+const _UNUSED_TICKETS_PLACEHOLDER = [
   { id:'INC-8832', title:'VPN latency — Kaduna RTC', category:'Network', priority:'P2', status:'In Progress', assignee:'E. Bello', raised:'05 Apr 2026', sla:'4h', description:'Users at Kaduna RTC experiencing >300ms latency on VPN. Impacting RDP sessions and remote training delivery.' },
   { id:'INC-8821', title:'Laptop imaging queue backlog', category:'Hardware', priority:'P3', status:'Queued', assignee:'ICT Service Desk', raised:'04 Apr 2026', sla:'72h', description:'12 new laptops pending OS imaging and software deployment for Q2 recruitment hires.' },
   { id:'INC-8819', title:'Email delivery failure — Finance', category:'Email', priority:'P1', status:'Resolved', assignee:'E. Bello', raised:'03 Apr 2026', sla:'1h', description:'Exchange connector misconfiguration caused outbound mail failure for Finance team. Resolved by adjusting SMTP relay settings.' },
@@ -18,33 +100,8 @@ const ALL_TICKETS = [
   { id:'INC-8801', title:'CCTV offline — Gate 2', category:'Security', priority:'P2', status:'In Progress', assignee:'ICT Service Desk', raised:'01 Apr 2026', sla:'8h', description:'Main gate camera offline since 1 Apr. Ticket logged with facilities for cable inspection.' },
   { id:'REQ-2201', title:'New user accounts — 3 recruitment hires', category:'Access', priority:'P3', status:'Completed', assignee:'ICT Admin', raised:'06 Apr 2026', sla:'4h', description:'AD accounts, email, and VPN certs provisioned for 3 new staff starting 07 Apr 2026.' },
 ]
-
-const SYSTEMS = [
-  { name:'ERP (SAP)',            status:'operational', uptime:'99.8%', lastCheck:'07 Apr 09:45', host:'ERP-PROD-01',  db:'Oracle 19c'       },
-  { name:'Active Directory',     status:'operational', uptime:'100%',  lastCheck:'07 Apr 09:45', host:'DC-01/DC-02', db:'AD DS'             },
-  { name:'Exchange Mail Server', status:'operational', uptime:'99.6%', lastCheck:'07 Apr 09:44', host:'MAIL-01',     db:'Exchange 2019'     },
-  { name:'Finance BI Gateway',   status:'degraded',    uptime:'97.1%', lastCheck:'07 Apr 09:40', host:'BI-GW-01',    db:'SQL Server 2022'   },
-  { name:'LMS Platform',         status:'operational', uptime:'99.9%', lastCheck:'07 Apr 09:45', host:'LMS-PROD',    db:'PostgreSQL 15'     },
-  { name:'Backup (Veeam)',        status:'operational', uptime:'100%',  lastCheck:'07 Apr 03:00', host:'BKP-NAS-01',  db:'Veeam B&R'        },
-  { name:'Cisco Core Switch',    status:'operational', uptime:'100%',  lastCheck:'07 Apr 09:45', host:'SW-CORE-01',  db:'IOS-XE'           },
-  { name:'CCTV NVR',             status:'incident',    uptime:'94.2%', lastCheck:'07 Apr 09:30', host:'NVR-HQ-01',   db:'Hikvision'        },
-]
-
-const ASSETS = [
-  { tag:'NAPTIN-NB-0441', type:'Laptop',  make:'Dell Latitude 5540',   user:'M. Yusuf — Finance',     dept:'Finance', status:'Active',    warranty:'Jan 2027' },
-  { tag:'NAPTIN-NB-0440', type:'Laptop',  make:'Dell Latitude 5540',   user:'Unassigned',              dept:'ICT Pool', status:'Available', warranty:'Jan 2027' },
-  { tag:'NAPTIN-DT-0218', type:'Desktop', make:'HP ProDesk 600 G9',    user:'A. Sule — Internal Audit',dept:'Audit',   status:'Active',    warranty:'Mar 2026' },
-  { tag:'NAPTIN-SV-0012', type:'Server',  make:'Dell PowerEdge R750',  user:'ICT Infrastructure',      dept:'ICT',     status:'Active',    warranty:'Feb 2026' },
-  { tag:'NAPTIN-PR-0091', type:'Printer', make:'HP LaserJet MFP M438', user:'Block B — HR',            dept:'HR',      status:'Fault',     warranty:'Jun 2024' },
-  { tag:'NAPTIN-NB-0388', type:'Laptop',  make:'Lenovo ThinkPad T14',  user:'F. Adamu — Legal',        dept:'Legal',   status:'Active',    warranty:'Sep 2026' },
-]
-
-const CHANGES = [
-  { ref:'CAB-2026-04-003', title:'Firewall rule — Finance BI gateway', type:'Normal', risk:'Low',    status:'Approved',    date:'Sat 11 Apr 23:00', owner:'E. Bello'    },
-  { ref:'CAB-2026-04-002', title:'ERP HCM v3.2 upgrade',              type:'Major',  risk:'High',   status:'In Progress', date:'14 Apr 2026',      owner:'Apps Team'   },
-  { ref:'CAB-2026-03-011', title:'Active Directory GPO hardening',     type:'Normal', risk:'Medium', status:'Completed',   date:'28 Mar 2026',      owner:'E. Bello'    },
-  { ref:'CAB-2026-03-008', title:'LMS v4.1 patch',                    type:'Minor',  risk:'Low',    status:'Completed',   date:'20 Mar 2026',      owner:'Apps Team'   },
-]
+//eslint-disable-next-line no-unused-vars
+void _UNUSED_TICKETS_PLACEHOLDER
 
 const PRIORITY_STYLE = {
   P1: 'bg-red-50 text-red-700 border-red-200',
@@ -76,6 +133,28 @@ export default function ICTPage() {
   const [filterStat, setFilterStat]   = useState('All')
   const [search, setSearch]           = useState('')
 
+  // resolve modal state
+  const [resolveTicket, setResolveTicket] = useState(null)   // raw ticket object
+  const [resolveNotes, setResolveNotes]   = useState('')
+
+  // API data
+  const { data: rawTickets = [],  refetch: refetchTickets } = useFetch(() => ictApi.getTickets())
+  const { data: rawSystems = [] }                           = useFetch(() => ictApi.getSystems())
+  const { data: rawAssets  = [] }                           = useFetch(() => ictApi.getAssets())
+  const { data: rawChanges = [] }                           = useFetch(() => ictApi.getChangeRequests())
+  const { data: summary    = {} }                           = useFetch(() => ictApi.getSummary())
+
+  const { run: doResolve, loading: resolving } = useMutation(
+    (id, notes) => ictApi.resolveTicket(id, { resolutionNotes: notes }),
+    { successMsg: 'Ticket marked resolved', onSuccess: () => { setResolveTicket(null); refetchTickets() } }
+  )
+
+  // Map API shapes → UI shapes expected by the render below
+  const ALL_TICKETS = rawTickets.map(normalizeTicket)
+  const SYSTEMS     = rawSystems.map(normalizeSystem)
+  const ASSETS      = rawAssets.map(normalizeAsset)
+  const CHANGES     = rawChanges.map(normalizeChange)
+
   const TABS = [
     { id:'service-desk',   label:'Service Desk',      icon: Headphones },
     { id:'infrastructure', label:'Infrastructure',    icon: Server      },
@@ -91,8 +170,8 @@ export default function ICTPage() {
     return matchPri && matchStat && matchSearch
   })
 
-  const openCount = ALL_TICKETS.filter(t => !['Resolved','Completed'].includes(t.status)).length
-  const p1Count   = ALL_TICKETS.filter(t => t.priority === 'P1').length
+  const openCount = summary.openTickets     ?? ALL_TICKETS.filter(t => !['Resolved','Completed'].includes(t.status)).length
+  const p1Count   = summary.criticalTickets ?? ALL_TICKETS.filter(t => t.priority === 'P1').length
 
   return (
     <div className="animate-fade-up">
@@ -105,7 +184,8 @@ export default function ICTPage() {
             <p className="text-sm text-slate-400">Service desk · Infrastructure · Assets · Change management · Security</p>
           </div>
         </div>
-        <button className="flex items-center gap-1.5 text-xs font-bold bg-[#006838] text-white px-3 py-1.5 rounded-xl hover:bg-[#005530] transition-colors">
+        <button onClick={() => setResolveTicket('new')}
+          className="flex items-center gap-1.5 text-xs font-bold bg-[#006838] text-white px-3 py-1.5 rounded-xl hover:bg-[#005530] transition-colors">
           <Plus size={13} />New Ticket
         </button>
       </div>
@@ -115,8 +195,8 @@ export default function ICTPage() {
         {[
           { label:'Open Tickets',        value: openCount, icon: Headphones,   bg:'bg-red-50',    color:'text-red-600'   },
           { label:'P1 Incidents',        value: p1Count,   icon: AlertTriangle, bg:'bg-amber-50',  color:'text-amber-600' },
-          { label:'System Uptime (30d)', value:'99.4%',    icon: Activity,     bg:'bg-green-50',  color:'text-[#006838]' },
-          { label:'Registered Assets',   value:'2,841',    icon: Server,       bg:'bg-blue-50',   color:'text-blue-600'  },
+          { label:'System Uptime (30d)', value: summary.slaCompliance != null ? `${summary.slaCompliance}%` : '—', icon: Activity, bg:'bg-green-50', color:'text-[#006838]' },
+          { label:'Registered Assets',   value: summary.activeAssets?.toLocaleString() ?? '—', icon: Server, bg:'bg-blue-50', color:'text-blue-600' },
         ].map((k, i) => (
           <div key={i} className="stat-card flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${k.bg} ${k.color} flex items-center justify-center flex-shrink-0`}><k.icon size={18} /></div>
@@ -189,7 +269,9 @@ export default function ICTPage() {
                     <p className="text-xs text-slate-600 leading-relaxed">{t.description}</p>
                     <div className="flex gap-2 mt-3">
                       {!['Resolved','Completed'].includes(t.status) && (
-                        <button className="text-xs font-bold text-[#006838] border border-green-200 px-3 py-1 rounded-xl hover:bg-green-50 flex items-center gap-1 transition-colors">
+                        <button
+                          onClick={() => { setResolveTicket(t); setResolveNotes('') }}
+                          className="text-xs font-bold text-[#006838] border border-green-200 px-3 py-1 rounded-xl hover:bg-green-50 flex items-center gap-1 transition-colors">
                           <CheckCircle2 size={11} />Mark Resolved
                         </button>
                       )}
@@ -394,6 +476,42 @@ export default function ICTPage() {
               <li>• <strong>NDPR Data Retention Policy</strong> pending DG approval — closes active audit gap.</li>
               <li>• <strong>Incident Response Playbook</strong> last updated Aug 2025 — review overdue by 2 months.</li>
             </ul>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Resolve Ticket Modal ══ */}
+      {resolveTicket && resolveTicket !== 'new' && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-800">Resolve Ticket — {resolveTicket.id}</h3>
+              <button onClick={() => setResolveTicket(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-xs text-slate-500">Add resolution notes before closing this ticket.</p>
+              <textarea
+                value={resolveNotes}
+                onChange={e => setResolveNotes(e.target.value)}
+                rows={4}
+                placeholder="Describe the resolution…"
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#006838] resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-50">
+              <button onClick={() => setResolveTicket(null)}
+                className="text-xs text-slate-500 border border-slate-200 px-4 py-1.5 rounded-xl hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                disabled={!resolveNotes.trim() || resolving}
+                onClick={() => doResolve(resolveTicket._id, resolveNotes)}
+                className="text-xs font-bold bg-[#006838] text-white px-4 py-1.5 rounded-xl hover:bg-[#005530] disabled:opacity-50">
+                {resolving ? 'Saving…' : 'Confirm Resolved'}
+              </button>
+            </div>
           </div>
         </div>
       )}

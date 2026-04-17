@@ -654,7 +654,7 @@ function AssignmentRulesTab({ toast }) {
 
       <div className="card">
         <div className="flex items-center gap-3 mb-4">
-          <h3 className="text-xs font-bold text-slate-800">Live Rule Demo</h3>
+          <h3 className="text-xs font-bold text-slate-800">Rule preview</h3>
           <select className="input text-xs w-56" value={showDemo} onChange={e => setShowDemo(e.target.value)}>
             {Object.keys(DEMO).map(k => <option key={k}>{k}</option>)}
           </select>

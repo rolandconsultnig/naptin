@@ -16,9 +16,9 @@ Deploy from the GitHub repo into a **dedicated folder** on the server. PostgreSQ
 | **4002** | Node workbench API | all interfaces (default) | `server/index.js` — `/api/v1/*` (`API_PORT=4002`). Set **`VITE_WORKBENCH_API_URL`** to `http://SERVER:4002/api/v1` if the UI is on 4001. |
 | **4003** | Owl Talk (Python) | per `dev/main.py` | Chat REST + Socket.IO. |
 
-**PM2:** `pm2 start deploy/pm2.ecosystem.config.cjs` starts both **`naptin-web`** (4001) and **`naptin-api`** (4002).
+**PM2:** `pm2 start deploy/pm2.ecosystem.config.cjs` starts **`naptin-web`** (4001), **`naptin-api`** (4002), and **`naptin-chat`** (4003, Owl Talk).
 
-**Firewall:** open **4001** (and **4002** if the browser calls the API directly). Prefer Nginx + TLS in front when going public.
+**Firewall:** open **4001**, **4002**, and **4003** if the browser calls those ports directly (typical when using `vite preview` + Node + Python without Nginx). Prefer Nginx + TLS in front when going public.
 
 **Nginx optional:** If you terminate TLS on Nginx, you can `proxy_pass http://127.0.0.1:4001` for `/` instead of serving `dist/` as files.
 
@@ -135,7 +135,23 @@ The app is **not** reading your `.env`, or `DATABASE_URL` still points at user `
    `psql "postgresql://naptin_app:your-strong-password@127.0.0.1:5432/naptin_portal" -c 'SELECT 1'`  
    If that fails, fix PostgreSQL user/password before re-running `npm run db:*`.
 
-### Step 6 — Start the Node API (port 4002) with PM2
+### Step 5b — Owl Talk (Messages / chat) — Python venv on port 4003
+
+The portal **Messages** screen needs Owl Talk running. Without it, the browser shows “Connecting…” and WebSocket errors to `:4003`.
+
+```bash
+cd /opt/naptin/app
+sudo apt install -y python3 python3-pip python3-venv
+cd dev
+python3 -m venv venv
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
+cd ..
+```
+
+`deploy/pm2.ecosystem.config.cjs` uses **`dev/venv/bin/python`** for **`naptin-chat`**. Owl Talk reads **`DATABASE_URL`** (or **`OWL_TALK_DATABASE_URL`**) from `.env` via PM2.
+
+### Step 6 — Start web + API + chat with PM2
 
 ```bash
 cd /opt/naptin/app
@@ -162,6 +178,14 @@ curl -sS http://127.0.0.1:4002/api/v1/health
 ```
 
 You should see JSON with `"ok": true` if the database connection works.
+
+Check Owl Talk (from the server):
+
+```bash
+curl -sS http://127.0.0.1:4003/health
+```
+
+You should see JSON like `"status": "healthy"`. If **`naptin-chat`** crashes, run `pm2 logs naptin-chat --lines 80` (often missing `venv` or `pip install`).
 
 ### Step 7 — Configure Nginx
 

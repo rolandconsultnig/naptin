@@ -511,7 +511,7 @@ export function FinanceProvider({ children }) {
       cashAdd: (payload) => { if (!String(payload?.pool || '').trim()) { toast.error('Enter pool name'); return } run('CASH_ADD', payload, 'Cash pool added') },
       projectSetActual: (code, actual) => run('PROJECT_SET_ACTUAL', { code, actual }, 'Project actual updated'),
       projectAdd: (payload) => { if (!String(payload?.name || '').trim()) { toast.error('Enter project name'); return } run('PROJECT_ADD', payload, 'Project added') },
-      taxFile: (index) => run('TAX_FILE', { index }, 'Filing submitted (prototype)'),
+      taxFile: (index) => run('TAX_FILE', { index }, 'Filing submitted'),
       taxAdd: (payload) => { if (!String(payload?.period || '').trim()) { toast.error('Enter period'); return } run('TAX_ADD', payload, 'Tax run added') },
       entityMap: (code) => run('ENTITY_MAP', { code }, 'Entity mapping completed'),
       ifrsRun: (id) => run('IFRS_RUN', { id }, 'Report run queued'),

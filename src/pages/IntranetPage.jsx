@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { NAPTIN_LOGO } from '../assets/images'
 import { Heart, MessageCircle, Share2, Image, Paperclip, Megaphone, Send, Hash, TrendingUp } from 'lucide-react'
 import { intranetApi } from '../intranet/api'
+import { resolveWorkbenchApiBase } from '../config/workbenchApiBase'
 
 const STORAGE_KEY = 'naptin.intranet.feed.v1'
 
@@ -265,7 +266,7 @@ export default function IntranetPage() {
   const resolveAttachmentUrl = (url) => {
     if (!url) return ''
     if (url.startsWith('http://') || url.startsWith('https://')) return url
-    const apiBase = import.meta.env.VITE_WORKBENCH_API_URL || 'http://localhost:4002/api/v1'
+    const apiBase = resolveWorkbenchApiBase()
     const apiOrigin = apiBase.replace(/\/api\/v1\/?$/, '')
     if (url.startsWith('/')) return `${apiOrigin}${url}`
     return `${apiOrigin}/${url}`

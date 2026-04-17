@@ -1,6 +1,26 @@
 import os
+import re
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# Windows consoles often use cp1252; emoji in prints can raise UnicodeEncodeError before the server binds.
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(_REPO_ROOT, '.env'))
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+except ImportError:
+    pass
 
 from flask import Flask, send_from_directory, session, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -28,28 +48,67 @@ app.config['SESSION_COOKIE_HTTPONLY'] = False
 app.config['SESSION_COOKIE_NAME'] = 'owltalk_session'
 app.config['SESSION_COOKIE_PATH'] = '/'
 
-# Enable CORS for all routes - allow frontend on port 6677 (HTTP and HTTPS) from localhost and LAN
-CORS(app, 
-     supports_credentials=True, 
-     origins=[
-         "https://localhost:6677", "https://127.0.0.1:6677", 
-         "http://localhost:6677", "http://127.0.0.1:6677",
-         "http://localhost:5173", "http://127.0.0.1:5173",
-         "http://localhost:5174", "http://127.0.0.1:5174",
-         "https://localhost:5173", "https://127.0.0.1:5173",
-         "https://localhost:5174", "https://127.0.0.1:5174",
-         "https://192.168.37.11:6677", "http://192.168.37.11:6677",
-         "*"
-     ],
-     allow_headers=["Content-Type", "Authorization", "Cookie", "X-Requested-With"],
-     expose_headers=["Content-Type", "Set-Cookie"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+# CORS: browsers reject Access-Control-Allow-Origin: * when credentials are used.
+# Allow portal UI on :4001 (vite preview / prod), Vite dev ports, localhost, plus OWL_TALK_CORS_ORIGINS.
+_CORS_REGEXES = tuple(
+    re.compile(p)
+    for p in (
+        r'^https?://localhost(?::\d+)?$',
+        r'^https?://127\.0\.0\.1(?::\d+)?$',
+        r'^https?://\[::1\](?::\d+)?$',
+        r'^https?://[a-zA-Z0-9.-]+:4001$',   # NAPTIN SPA (vite preview) on LAN / public IP
+        r'^https?://[a-zA-Z0-9.-]+:5173$',
+        r'^https?://[a-zA-Z0-9.-]+:5174$',
+        r'^https?://[a-zA-Z0-9.-]+:6677$',
+    )
+)
+
+
+def _parse_extra_cors_origins():
+    raw = os.environ.get('OWL_TALK_CORS_ORIGINS', '').strip()
+    if not raw:
+        return []
+    return [o.strip() for o in raw.split(',') if o.strip()]
+
+
+_EXTRA_CORS_ORIGINS = set(_parse_extra_cors_origins())
+
+# Static + legacy LAN entries (still need exact match for those hosts)
+_CORS_STRING_ORIGINS = [
+    'http://localhost:4001', 'http://127.0.0.1:4001',
+    'https://localhost:4001', 'https://127.0.0.1:4001',
+    'https://localhost:6677', 'https://127.0.0.1:6677',
+    'http://localhost:6677', 'http://127.0.0.1:6677',
+    'http://localhost:5173', 'http://127.0.0.1:5173',
+    'http://localhost:5174', 'http://127.0.0.1:5174',
+    'https://localhost:5173', 'https://127.0.0.1:5173',
+    'https://localhost:5174', 'https://127.0.0.1:5174',
+    'https://192.168.37.11:6677', 'http://192.168.37.11:6677',
+] + list(_EXTRA_CORS_ORIGINS)
+
+CORS(
+    app,
+    supports_credentials=True,
+    origins=_CORS_STRING_ORIGINS + list(_CORS_REGEXES),
+    allow_headers=['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
+    expose_headers=['Content-Type', 'Set-Cookie'],
+    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+)
 
 # Initialize Flask-Session
 Session(app)
 
+
+# Same rules as Flask-CORS (no "*" — credentialed clients require explicit / pattern origins).
+_SOCKETIO_CORS_ORIGINS = _CORS_STRING_ORIGINS + list(_CORS_REGEXES)
+
 # Initialize SocketIO with threading mode for better Windows compatibility
-socketio = SocketIO(app, cors_allowed_origins="*", supports_credentials=True, async_mode='threading')
+socketio = SocketIO(
+    app,
+    cors_allowed_origins=_SOCKETIO_CORS_ORIGINS,
+    supports_credentials=True,
+    async_mode='threading',
+)
 
 # Register blueprints
 app.register_blueprint(user_bp, url_prefix='/api')
@@ -68,8 +127,13 @@ def serve_upload(filename):
     uploads_dir = os.path.join(os.getcwd(), 'uploads')
     return send_from_directory(uploads_dir, filename)
 
-# Database configuration - PostgreSQL
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Samolan123@localhost:5432/naptin_db'
+# Database configuration — same PostgreSQL as NAPTIN (naptin_db) unless overridden.
+# Priority: OWL_TALK_DATABASE_URL, then DATABASE_URL from repo-root .env (loaded above), then default.
+app.config['SQLALCHEMY_DATABASE_URI'] = (
+    os.environ.get('OWL_TALK_DATABASE_URL', '').strip()
+    or os.environ.get('DATABASE_URL', '').strip()
+    or 'postgresql://postgres:Samolan123@127.0.0.1:5432/naptin_db'
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_POOL_SIZE'] = 10
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -79,9 +143,19 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 app.config['SQLALCHEMY_MAX_OVERFLOW'] = 20
 db.init_app(app)
 
-# Create database tables
+# Create database tables in the configured database (typically naptin_db)
 with app.app_context():
     db.create_all()
+    try:
+        from urllib.parse import urlparse
+
+        _u = urlparse(
+            app.config['SQLALCHEMY_DATABASE_URI'].replace('postgresql+psycopg2://', 'postgresql://', 1)
+        )
+        _db = (_u.path or '/').lstrip('/') or '(unknown)'
+        print(f"[owl-talk] Connected DB: {_u.scheme}://{_u.hostname}:{_u.port or 5432}/{_db}")
+    except Exception:
+        print('[owl-talk] Database tables ensured (create_all).')
     print("✅ Database tables created successfully")
 
 # Store active connections
@@ -146,12 +220,21 @@ def handle_disconnect():
                 'status': 'offline'
             }, broadcast=True)
 
+def _socket_int(val):
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
 @socketio.on('send_message')
 def handle_send_message(data):
     print(f'📨 Received send_message from {request.sid}')
     
     # Try to get user_id from session or active users tracking
-    sender_id = session.get('user_id')
+    sender_id = _socket_int(session.get('user_id'))
     
     if not sender_id:
         # Try to find user by socket ID
@@ -165,10 +248,14 @@ def handle_send_message(data):
         emit('error', {'message': 'Not authenticated'})
         return
     
-    receiver_id = data.get('receiver_id')
+    receiver_id = _socket_int(data.get('receiver_id'))
     content = data.get('content')
     message_type = data.get('message_type', 'text')
-    reply_to_id = data.get('reply_to_id')
+    reply_to_id = _socket_int(data.get('reply_to_id'))
+    
+    if receiver_id is None:
+        emit('error', {'message': 'Invalid receiver_id'})
+        return
     
     # Save message to database
     message = Message(
@@ -304,7 +391,7 @@ def handle_message_read_receipt(data):
 @socketio.on('call_initiate')
 def handle_call_initiate(data):
     """Initialize a call"""
-    caller_id = session.get('user_id')
+    caller_id = _socket_int(session.get('user_id'))
     if not caller_id:
         for uid, sid in active_users.items():
             if sid == request.sid:
@@ -314,7 +401,9 @@ def handle_call_initiate(data):
     if not caller_id:
         return
     
-    receiver_id = data.get('receiver_id')
+    receiver_id = _socket_int(data.get('receiver_id'))
+    if receiver_id is None:
+        return
     call_type = data.get('call_type', 'audio')
     
     # Create call record
@@ -346,8 +435,13 @@ def handle_call_initiate(data):
 @socketio.on('call_accept')
 def handle_call_accept(data):
     """Accept a call"""
-    user_id = session.get('user_id')
-    call_id = data.get('call_id')
+    user_id = _socket_int(session.get('user_id'))
+    if not user_id:
+        for uid, sid in active_users.items():
+            if sid == request.sid:
+                user_id = uid
+                break
+    call_id = _socket_int(data.get('call_id'))
     
     try:
         call = Call.query.get(call_id)
@@ -368,9 +462,14 @@ def handle_call_accept(data):
 @socketio.on('call_end')
 def handle_call_end(data):
     """End a call"""
-    user_id = session.get('user_id')
-    call_id = data.get('call_id')
-    target_id = data.get('target_id')
+    user_id = _socket_int(session.get('user_id'))
+    if not user_id:
+        for uid, sid in active_users.items():
+            if sid == request.sid:
+                user_id = uid
+                break
+    call_id = _socket_int(data.get('call_id'))
+    target_id = _socket_int(data.get('target_id'))
     
     try:
         # If we have a call_id, use it
@@ -402,8 +501,13 @@ def handle_call_end(data):
 @socketio.on('call_reject')
 def handle_call_reject(data):
     """Reject a call"""
-    user_id = session.get('user_id')
-    call_id = data.get('call_id')
+    user_id = _socket_int(session.get('user_id'))
+    if not user_id:
+        for uid, sid in active_users.items():
+            if sid == request.sid:
+                user_id = uid
+                break
+    call_id = _socket_int(data.get('call_id'))
     
     try:
         call = Call.query.get(call_id)
@@ -420,7 +524,7 @@ def handle_call_reject(data):
 @socketio.on('ice_candidate')
 def handle_ice_candidate(data):
     """Handle WebRTC ICE candidates"""
-    target_id = data.get('target_id')
+    target_id = _socket_int(data.get('target_id'))
     
     if target_id in active_users:
         emit('ice_candidate', {
@@ -432,7 +536,7 @@ def handle_ice_candidate(data):
 @socketio.on('offer')
 def handle_offer(data):
     """Handle WebRTC offer"""
-    target_id = data.get('target_id')
+    target_id = _socket_int(data.get('target_id'))
     
     if target_id in active_users:
         emit('offer', {
@@ -443,7 +547,7 @@ def handle_offer(data):
 @socketio.on('answer')
 def handle_answer(data):
     """Handle WebRTC answer"""
-    target_id = data.get('target_id')
+    target_id = _socket_int(data.get('target_id'))
     
     if target_id in active_users:
         emit('answer', {
@@ -633,9 +737,11 @@ def serve(path):
 
 if __name__ == '__main__':
     import ssl
-    
-    backend_port = 4003
-    
+
+    backend_port = int(os.environ.get('OWL_TALK_PORT', '4003'))
+    flask_env = os.environ.get('FLASK_ENV', 'development').lower()
+    debug_mode = flask_env != 'production'
+
     # Check if SSL certificates exist
     ssl_cert = os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')
     ssl_key = os.path.join(os.path.dirname(__file__), 'ssl', 'key.pem')
@@ -653,7 +759,7 @@ if __name__ == '__main__':
         context.load_cert_chain(ssl_cert, ssl_key)
         
         # Use gevent async_mode for better SSL support on Windows
-        socketio.run(app, host='0.0.0.0', port=backend_port, debug=True, 
+        socketio.run(app, host='0.0.0.0', port=backend_port, debug=debug_mode,
                     ssl_context=context, allow_unsafe_werkzeug=True)
     else:
         print("🦉 Starting Owl-talk Server...")
@@ -661,4 +767,4 @@ if __name__ == '__main__':
         print("🌐 Server will be available at: http://localhost:" + str(backend_port))
         print("📱 WebSocket connections enabled")
         
-        socketio.run(app, host='0.0.0.0', port=backend_port, debug=True, allow_unsafe_werkzeug=True)
+        socketio.run(app, host='0.0.0.0', port=backend_port, debug=debug_mode, allow_unsafe_werkzeug=True)

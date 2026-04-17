@@ -31,12 +31,20 @@ export function usesChatViteProxy() {
   return true
 }
 
-/** Extra `socket.io-client` options when using the Vite proxy. */
+/**
+ * Extra `socket.io-client` options when using the Vite proxy.
+ * Vite's WebSocket upgrade to an HTTPS (TLS) chat backend often fails with "Invalid frame header";
+ * long-polling over the same HTTP proxy path is reliable and still carries the session cookie.
+ */
 export function getSocketIoClientOptions() {
   if (usesChatViteProxy()) {
-    return { path: '/proxy-chat-socket/socket.io' }
+    return {
+      path: '/proxy-chat-socket/socket.io',
+      transports: ['polling'],
+      upgrade: false,
+    }
   }
-  return {}
+  return { transports: ['websocket', 'polling'] }
 }
 
 /** When UI is on :4001 (vite preview) or another port, chat still runs on :4003 unless Nginx same-origin — then set VITE_CHAT_* */

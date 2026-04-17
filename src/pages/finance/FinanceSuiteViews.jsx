@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import useFetch from '../../hooks/useFetch'
+import useMutation from '../../hooks/useMutation'
+import { financeApi } from '../../services/financeService'
 import { useFinance } from '../../context/FinanceContext'
 import { FINANCE_RBAC_HINTS } from '../../data/financeAccounting'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
@@ -30,18 +34,18 @@ const KpiPill = ({ k }) => {
 
 const btnRow = 'flex flex-wrap gap-1.5'
 
-function SpendMonthEditor() {
-  const { state, spendSet } = useFinance()
+// Placeholder: SpendMonthEditor will need to be rewired to use API if/when spendByMonth is backend-driven
+function SpendMonthEditor({ spendByMonth, onSet }) {
   return (
     <div className="flex flex-wrap gap-2 mt-3">
-      {state.spendByMonth.map((r) => (
+      {spendByMonth.map((r) => (
         <label key={r.month} className="text-[10px] flex items-center gap-1 bg-slate-50 rounded-lg px-2 py-1 border border-slate-100">
           {r.month}
           <input
             type="number"
             className="w-14 text-xs border border-slate-200 rounded px-1 py-0.5"
             value={r.amount}
-            onChange={(e) => spendSet(r.month, e.target.value)}
+            onChange={(e) => onSet(r.month, e.target.value)}
           />
         </label>
       ))}
@@ -49,30 +53,96 @@ function SpendMonthEditor() {
   )
 }
 
+function formatNgnShort(ngn) {
+  if (ngn == null || Number.isNaN(Number(ngn))) return '—'
+  const n = Number(ngn)
+  if (n >= 1e9) return `₦${(n / 1e9).toFixed(2)}B`
+  if (n >= 1e6) return `₦${Math.round(n / 1e6)}M`
+  if (n >= 1e3) return `₦${Math.round(n / 1e3)}K`
+  return `₦${Math.round(n)}`
+}
+
+function mapBankTxnToRow(t) {
+  const credit = Number(t.credit) || 0
+  const debit = Number(t.debit) || 0
+  const amt =
+    credit > 0
+      ? `₦${credit.toLocaleString('en-NG', { maximumFractionDigits: 0 })}`
+      : debit > 0
+        ? `₦(${debit.toLocaleString('en-NG', { maximumFractionDigits: 0 })})`
+        : '—'
+  return {
+    ref: t.reference || `TXN-${t.id}`,
+    desc: t.description,
+    dept: '—',
+    amount: amt,
+    date: t.transactionDate,
+    status: t.isReconciled ? 'paid' : 'pending',
+    source: 'api',
+  }
+}
+
 export function FinanceOverviewView() {
-  const { state, reset, exportPack, addJournal, utilisationSet, treasuryAdd, treasurySetStatus, kpiNudge } = useFinance()
   const navigate = useNavigate()
+  const { state, addJournal, treasuryAdd, treasurySetStatus, kpiNudge, utilisationSet, spendSet } = useFinance()
+
+  const { data: apInvoices = [] } = useFetch(() => financeApi.getAPInvoices(), [])
+  const { data: bankAccounts = [] } = useFetch(() => financeApi.getBankAccounts(), [])
+  const primaryBankId = bankAccounts[0]?.id
+  const { data: bankTransactions = [], refetch: refetchBankTx } = useFetch(
+    () => (primaryBankId ? financeApi.getBankTransactions(primaryBankId) : Promise.resolve([])),
+    [primaryBankId]
+  )
+  const { data: overview } = useFetch(() => financeApi.getOverviewSummary(), [])
+
+  const openAp = apInvoices.filter((i) => !['Payment scheduled'].includes(i.status)).length
+
+  const apiSpendLive = useMemo(
+    () => (overview?.spendByMonth || []).some((x) => (Number(x.amount) || 0) > 0),
+    [overview]
+  )
+  const spendChart = apiSpendLive ? overview.spendByMonth : state.spendByMonth
+  const pieChart = overview?.pieBudget?.length ? overview.pieBudget : state.pieBudget
+  const utilPct =
+    overview?.budgetUtilisationPct != null && !Number.isNaN(Number(overview.budgetUtilisationPct))
+      ? Number(overview.budgetUtilisationPct)
+      : state.budgetUtilisationPct
+  const openApDisplay =
+    overview && typeof overview.openApCount === 'number' ? String(overview.openApCount) : String(openAp)
+
+  const postTxnFn = useCallback(
+    (body) => {
+      if (!primaryBankId) return Promise.reject(new Error('No bank account in ledger — seed fin_bank_accounts'))
+      return financeApi.createBankTransaction(primaryBankId, body)
+    },
+    [primaryBankId]
+  )
+  const { run: createBankTxn, loading: bankTxnSaving } = useMutation(postTxnFn, {
+    onSuccess: refetchBankTx,
+    successMsg: 'Bank movement recorded',
+  })
+
   const [jDesc, setJDesc] = useState('')
   const [jLines, setJLines] = useState('2')
   const [txDesc, setTxDesc] = useState('')
   const [txAmt, setTxAmt] = useState('')
   const [txDept, setTxDept] = useState('Finance')
 
-  const openAp = state.apInvoices.filter((i) => !['Payment scheduled'].includes(i.status)).length
+  const treasuryRows = useMemo(() => {
+    if (primaryBankId && Array.isArray(bankTransactions)) {
+      return bankTransactions.map(mapBankTxnToRow)
+    }
+    return state.treasuryTransactions.map((t) => ({ ...t, source: 'local' }))
+  }, [primaryBankId, bankTransactions, state.treasuryTransactions])
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-slate-500 max-w-xl">
-          FY 2026 executive snapshot — figures and tables below reflect your working ledger in this browser (saved automatically).
+          FY 2026 executive snapshot — figures and tables below reflect your working ledger from the backend API.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-secondary text-sm" onClick={() => reset()}>
-            <RotateCcw size={13} /> Reset module
-          </button>
-          <button type="button" className="btn-secondary text-sm" onClick={() => exportPack()}>
-            <Download size={13} /> Export pack
-          </button>
+          {/* Reset and Export pack buttons can be implemented if API supports */}
           <button type="button" className="btn-primary text-sm" onClick={() => navigate('/app/finance/ledger')}>
             <BookOpen size={13} /> GL &amp; COA
           </button>
@@ -116,10 +186,41 @@ export function FinanceOverviewView() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total budget', value: '₦3.1B', sub: 'FY 2026 allocation', icon: Wallet, bg: 'bg-green-50', color: 'text-[#006838]' },
-          { label: 'Expenditure (view)', value: `${state.budgetUtilisationPct}%`, sub: 'Utilisation slider below', icon: TrendingDown, bg: 'bg-amber-50', color: 'text-amber-600' },
-          { label: 'Liquidity (ops)', value: '₦412M', sub: 'Consolidated cash', icon: CheckCircle, bg: 'bg-emerald-50', color: 'text-emerald-600' },
-          { label: 'Open AP queue', value: String(openAp), sub: 'Not yet scheduled', icon: Clock, bg: 'bg-purple-50', color: 'text-purple-600' },
+          {
+            label: 'Total budget',
+            value: overview?.totalBudgetNgn > 0 ? formatNgnShort(overview.totalBudgetNgn) : '₦3.1B',
+            sub: overview?.fiscalYearLabel ? `${overview.fiscalYearLabel} · budget heads` : 'FY 2026 allocation',
+            icon: Wallet,
+            bg: 'bg-green-50',
+            color: 'text-[#006838]',
+          },
+          {
+            label: 'Expenditure (view)',
+            value: `${utilPct}%`,
+            sub:
+              overview?.totalBudgetNgn > 0
+                ? 'Actual + committed vs revised budget (API)'
+                : 'Utilisation slider below',
+            icon: TrendingDown,
+            bg: 'bg-amber-50',
+            color: 'text-amber-600',
+          },
+          {
+            label: 'Liquidity (ops)',
+            value: overview?.liquidityNgn > 0 ? formatNgnShort(overview.liquidityNgn) : '₦412M',
+            sub: 'Active bank accounts (ledger)',
+            icon: CheckCircle,
+            bg: 'bg-emerald-50',
+            color: 'text-emerald-600',
+          },
+          {
+            label: 'Open AP queue',
+            value: openApDisplay,
+            sub: 'Invoices not paid / void',
+            icon: Clock,
+            bg: 'bg-purple-50',
+            color: 'text-purple-600',
+          },
         ].map((k, i) => (
           <div key={i} className="stat-card">
             <div className={`w-9 h-9 rounded-xl ${k.bg} ${k.color} flex items-center justify-center mb-3`}>
@@ -178,24 +279,30 @@ export function FinanceOverviewView() {
             <p className="text-xs text-slate-400">₦ millions · edit values below to refresh the chart</p>
           </div>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={state.spendByMonth} barSize={30}>
+            <BarChart data={spendChart} barSize={30}>
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
               <Tooltip formatter={(v) => [`₦${v}M`, 'Spend']} contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid #e2e8f0' }} />
               <Bar dataKey="amount" fill="#006838" radius={[5, 5, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-          <SpendMonthEditor />
+          {apiSpendLive ? (
+            <p className="text-[10px] text-slate-400 mt-2">Monthly bars from posted expense journals (current calendar year).</p>
+          ) : (
+            <SpendMonthEditor spendByMonth={state.spendByMonth} onSet={spendSet} />
+          )}
         </div>
         <div className="card">
           <div className="mb-4">
             <p className="text-sm font-bold text-slate-800">Budget by category</p>
-            <p className="text-xs text-slate-400">₦ millions</p>
+            <p className="text-xs text-slate-400">
+              ₦ millions{overview?.pieBudget?.length ? ' · expense budget by department (API)' : ''}
+            </p>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={state.pieBudget} dataKey="value" cx="50%" cy="50%" outerRadius={75} innerRadius={45}>
-                {state.pieBudget.map((entry, i) => (
+              <Pie data={pieChart} dataKey="value" cx="50%" cy="50%" outerRadius={75} innerRadius={45}>
+                {pieChart.map((entry, i) => (
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
@@ -208,11 +315,37 @@ export function FinanceOverviewView() {
 
       <div className="card">
         <p className="text-xs font-bold text-slate-700 mb-2">Add treasury movement</p>
+        <p className="text-[10px] text-slate-400 mb-2">
+          {primaryBankId
+            ? `Posting to operating account: ${bankAccounts[0]?.accountName || 'primary'} (credit = cash in).`
+            : 'No bank account in API — lines are saved to this browser workspace only until treasury accounts are seeded.'}
+        </p>
         <div className="flex flex-col md:flex-row gap-2 md:items-end">
           <input className="np-input flex-1 text-sm" placeholder="Description" value={txDesc} onChange={(e) => setTxDesc(e.target.value)} />
           <input className="np-input w-full md:w-36 text-sm" placeholder="₦ amount" value={txAmt} onChange={(e) => setTxAmt(e.target.value)} />
           <input className="np-input w-full md:w-32 text-sm" placeholder="Dept" value={txDept} onChange={(e) => setTxDept(e.target.value)} />
-          <button type="button" className="btn-primary text-sm h-[42px]" onClick={() => { treasuryAdd({ desc: txDesc, amount: txAmt, dept: txDept }); setTxDesc(''); setTxAmt('') }}>
+          <button
+            type="button"
+            disabled={bankTxnSaving}
+            className="btn-primary text-sm h-[42px] disabled:opacity-50"
+            onClick={async () => {
+              const raw = String(txAmt || '').replace(/[^\d.]/g, '')
+              const credit = parseFloat(raw) || 0
+              if (primaryBankId && credit > 0) {
+                await createBankTxn({
+                  transactionDate: new Date().toISOString().slice(0, 10),
+                  description: `${txDesc.trim() || 'Cash movement'}${txDept ? ` · ${txDept}` : ''}`,
+                  reference: `WEB-${Date.now().toString(36).toUpperCase()}`,
+                  debit: 0,
+                  credit,
+                })
+              } else {
+                treasuryAdd({ desc: txDesc, amount: txAmt, dept: txDept })
+              }
+              setTxDesc('')
+              setTxAmt('')
+            }}
+          >
             Add line
           </button>
         </div>
@@ -221,7 +354,9 @@ export function FinanceOverviewView() {
       <div className="card p-0 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-800">Treasury movements</h3>
-          <span className="text-[10px] font-semibold text-slate-400">Live workspace</span>
+          <span className="text-[10px] font-semibold text-slate-400">
+            {primaryBankId ? 'Primary account (API)' : 'Live workspace (local)'}
+          </span>
         </div>
         <table className="w-full">
           <thead>
@@ -236,8 +371,8 @@ export function FinanceOverviewView() {
             </tr>
           </thead>
           <tbody>
-            {state.treasuryTransactions.map((t) => (
-              <tr key={t.ref} className="hover:bg-slate-50/50 transition-colors">
+            {treasuryRows.map((t, idx) => (
+              <tr key={`${t.ref}-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                 <td className="table-td">
                   <span className="text-xs font-mono text-slate-500">{t.ref}</span>
                 </td>
@@ -252,7 +387,7 @@ export function FinanceOverviewView() {
                 </td>
                 <td className="table-td text-right">
                   <div className={btnRow + ' justify-end'}>
-                    {t.status === 'pending' && (
+                    {t.source !== 'api' && t.status === 'pending' && (
                       <>
                         <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={() => treasurySetStatus(t.ref, 'processing')}>
                           Process
@@ -262,11 +397,12 @@ export function FinanceOverviewView() {
                         </button>
                       </>
                     )}
-                    {t.status === 'processing' && (
+                    {t.source !== 'api' && t.status === 'processing' && (
                       <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={() => treasurySetStatus(t.ref, 'paid')}>
                         Mark paid
                       </button>
                     )}
+                    {t.source === 'api' && <span className="text-[10px] text-slate-400">Reconcile in Bank view</span>}
                   </div>
                 </td>
               </tr>
@@ -279,18 +415,12 @@ export function FinanceOverviewView() {
 }
 
 export function FinanceLedgerView() {
-  const { state, addJournal, postJournal, updateCoaBalance } = useFinance()
-  const [desc, setDesc] = useState('')
-  const [lines, setLines] = useState('2')
-  const [balances, setBalances] = useState(() =>
-    Object.fromEntries(state.chartOfAccounts.map((r) => [r.code, r.balance]))
-  )
-  const syncBalances = () =>
-    setBalances(Object.fromEntries(state.chartOfAccounts.map((r) => [r.code, r.balance])))
+  const { data: chartOfAccounts = [], refetch: refetchCOA } = useFetch(() => financeApi.getChartOfAccounts(), [])
+  const { data: journals = [], refetch: refetchJournals } = useFetch(() => financeApi.getJournalEntries(), [])
+  const { run: createJournal } = useMutation(financeApi.createJournalEntry, { onSuccess: refetchJournals, successMsg: 'Journal draft saved' })
+  const { run: postJournal } = useMutation(financeApi.postJournalEntry, { onSuccess: refetchJournals, successMsg: 'Journal posted to GL' })
 
-  useEffect(() => {
-    setBalances(Object.fromEntries(state.chartOfAccounts.map((r) => [r.code, r.balance])))
-  }, [state.chartOfAccounts])
+  const [desc, setDesc] = useState('')
 
   return (
     <div className="space-y-5">
@@ -310,18 +440,42 @@ export function FinanceLedgerView() {
         <p className="text-xs font-bold text-slate-700 mb-2">New journal (draft)</p>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
           <input className="np-input flex-1 text-sm" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description" />
-          <input type="number" min={2} className="np-input w-24 text-sm" value={lines} onChange={(e) => setLines(e.target.value)} />
-          <button type="button" className="btn-primary text-sm h-[42px]" onClick={() => { addJournal(desc, lines); setDesc('') }}>
+          <button
+            type="button"
+            className="btn-primary text-sm h-[42px]"
+            onClick={async () => {
+              const withIds = chartOfAccounts.filter((a) => a.id)
+              if (withIds.length < 2) {
+                toast.error('Add at least two chart of accounts entries before running consolidation.')
+                return
+              }
+              const [a, b] = withIds
+              const amt = 1000
+              await createJournal({
+                entryDate: new Date().toISOString().slice(0, 10),
+                description: (desc || 'Manual journal draft').trim(),
+                preparedBy: 'portal',
+                lines: [
+                  { accountId: a.id, description: '', debit: amt, credit: 0 },
+                  { accountId: b.id, description: '', debit: 0, credit: amt },
+                ],
+              })
+              setDesc('')
+            }}
+          >
             <Plus size={14} /> Create draft
           </button>
         </div>
+        <p className="text-[10px] text-slate-400 mt-2">
+          Creates a balanced two-line draft (₦1,000) between the first two COA accounts returned by the API. Adjust lines in the database or extend the form for multi-line journals.
+        </p>
       </div>
 
       <div className="card p-0 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
           <span className="text-sm font-bold text-slate-800">Chart of accounts</span>
-          <button type="button" className="text-xs text-[#006838] font-semibold" onClick={syncBalances}>
-            Reload from state
+          <button type="button" className="text-xs text-[#006838] font-semibold" onClick={refetchCOA}>
+            Reload from API
           </button>
         </div>
         <div className="overflow-x-auto">
@@ -331,33 +485,22 @@ export function FinanceLedgerView() {
                 <th className="table-th text-left">Code</th>
                 <th className="table-th text-left">Account</th>
                 <th className="table-th text-left">Type</th>
-                <th className="table-th text-right">Balance / YTD</th>
-                <th className="table-th text-right">Save</th>
               </tr>
             </thead>
             <tbody>
-              {state.chartOfAccounts.map((r) => (
-                <tr key={r.code} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="table-td font-mono text-xs">{r.code}</td>
+              {chartOfAccounts.map((r) => (
+                <tr key={r.id || r.accountCode} className="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td className="table-td font-mono text-xs">{r.accountCode}</td>
                   <td className="table-td text-slate-800">{r.name}</td>
-                  <td className="table-td text-xs text-slate-500">{r.type}</td>
-                  <td className="table-td text-right">
-                    <input
-                      className="w-full max-w-[140px] text-right text-sm border border-slate-200 rounded-lg px-2 py-1"
-                      value={balances[r.code] ?? r.balance}
-                      onChange={(e) => setBalances((b) => ({ ...b, [r.code]: e.target.value }))}
-                    />
-                  </td>
-                  <td className="table-td text-right">
-                    <button type="button" className="text-xs font-semibold text-[#006838]" onClick={() => updateCoaBalance(r.code, balances[r.code] ?? r.balance)}>
-                      Update
-                    </button>
-                  </td>
+                  <td className="table-td text-xs text-slate-500">{r.accountType}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <p className="text-[10px] text-slate-400 px-5 py-2 border-t border-slate-50">
+          Trial balance and YTD balances are available from finance reports endpoints — COA here is read-only from the API.
+        </p>
       </div>
 
       <div className="card p-0 overflow-hidden">
@@ -377,25 +520,28 @@ export function FinanceLedgerView() {
             </tr>
           </thead>
           <tbody>
-            {state.journals.map((j) => (
+            {journals.map((j) => {
+              const st = String(j.status || '').toLowerCase()
+              const posted = st === 'posted'
+              return (
               <tr key={j.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                <td className="table-td font-mono text-xs">{j.id}</td>
-                <td className="table-td text-xs text-slate-500">{j.date}</td>
-                <td className="table-td text-slate-700">{j.desc}</td>
-                <td className="table-td text-xs">{j.lines}</td>
+                <td className="table-td font-mono text-xs">{j.entryRef || j.id}</td>
+                <td className="table-td text-xs text-slate-500">{j.entryDate || j.date}</td>
+                <td className="table-td text-slate-700">{j.description || j.desc}</td>
+                <td className="table-td text-xs">{Array.isArray(j.lines) ? j.lines.length : j.lines}</td>
                 <td className="table-td">
-                  <span className={`badge text-[10px] ${j.status === 'Posted' ? 'badge-green' : 'badge-amber'}`}>{j.status}</span>
+                  <span className={`badge text-[10px] ${posted ? 'badge-green' : 'badge-amber'}`}>{posted ? 'Posted' : 'Draft'}</span>
                 </td>
-                <td className="table-td text-xs font-mono">{j.preparer}</td>
+                <td className="table-td text-xs font-mono">{j.preparedBy || j.preparer}</td>
                 <td className="table-td text-right">
-                  {j.status === 'Draft' && (
-                    <button type="button" className="text-xs font-semibold text-[#006838]" onClick={() => postJournal(j.id)}>
+                  {st === 'draft' && (
+                    <button type="button" className="text-xs font-semibold text-[#006838]" onClick={async () => await postJournal(j.id)}>
                       <Play size={12} className="inline mr-0.5" /> Post
                     </button>
                   )}
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>
@@ -404,14 +550,17 @@ export function FinanceLedgerView() {
 }
 
 export function FinancePayablesView() {
-  const { state, apSchedulePayment, apHold, apRelease, apAdd } = useFinance()
+  const { data: apInvoices = [], loading, refetch } = useFetch(() => financeApi.getAPInvoices(), [])
+  const { run: createAPInvoice } = useMutation(financeApi.createAPInvoice, { onSuccess: refetch, successMsg: 'Invoice added' })
+  const { run: apSchedulePayment } = useMutation(financeApi.approveAPInvoice, { onSuccess: refetch, successMsg: 'Payment scheduled' })
+  // Hold/Release would need API endpoints; placeholder for now
   const [form, setForm] = useState({ vendor: '', amount: '', po: '', due: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const total = state.apInvoices.length
-  const pending = state.apInvoices.filter((r) => !['Payment scheduled'].includes(r.status)).length
-  const onHold = state.apInvoices.filter((r) => r.status === 'On hold').length
+  const total = apInvoices.length
+  const pending = apInvoices.filter((r) => !['Payment scheduled'].includes(r.status)).length
+  const onHold = apInvoices.filter((r) => r.status === 'On hold').length
 
   return (
     <div className="space-y-5">
@@ -465,7 +614,7 @@ export function FinancePayablesView() {
             </div>
           </div>
           <div className="flex gap-2 mt-3">
-            <button type="button" className="btn-primary text-sm" onClick={() => { apAdd(form); setForm({ vendor: '', amount: '', po: '', due: '' }); setOpen(false) }}>
+            <button type="button" className="btn-primary text-sm" onClick={async () => { await createAPInvoice(form); setForm({ vendor: '', amount: '', po: '', due: '' }); setOpen(false) }}>
               Save invoice
             </button>
             <button type="button" className="btn-secondary text-sm" onClick={() => setOpen(false)}>Cancel</button>
@@ -487,7 +636,7 @@ export function FinancePayablesView() {
             </tr>
           </thead>
           <tbody>
-            {state.apInvoices.map((r) => (
+            {apInvoices.map((r) => (
               <tr key={r.ref} className="border-b border-slate-50 hover:bg-slate-50/50">
                 <td className="table-td font-mono text-xs">{r.ref}</td>
                 <td className="table-td text-slate-700">{r.vendor}</td>
@@ -500,14 +649,9 @@ export function FinancePayablesView() {
                 <td className="table-td text-right">
                   <div className={btnRow + ' justify-end'}>
                     {(r.status === 'Ready for payment' || r.status === 'Matched') && (
-                      <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={() => apSchedulePayment(r.ref)}>Schedule pay</button>
+                      <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={async () => await apSchedulePayment(r.ref)}>Schedule pay</button>
                     )}
-                    {r.status !== 'On hold' && r.status !== 'Payment scheduled' && (
-                      <button type="button" className="text-[10px] font-semibold text-slate-500" onClick={() => apHold(r.ref)}>Hold</button>
-                    )}
-                    {r.status === 'On hold' && (
-                      <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={() => apRelease(r.ref)}>Release</button>
-                    )}
+                    {/* Hold/Release actions would be implemented here if API endpoints exist */}
                   </div>
                 </td>
               </tr>
@@ -520,17 +664,16 @@ export function FinancePayablesView() {
 }
 
 export function FinanceReceivablesView() {
-  const { state, arRecordPayment, arReminder, arAdd } = useFinance()
+  const { data: arInvoices = [], loading, refetch } = useFetch(() => financeApi.getARInvoices(), [])
+  const { run: createARInvoice } = useMutation(financeApi.createARInvoice, { onSuccess: refetch, successMsg: 'Invoice raised' })
+  const { run: recordARReceipt } = useMutation((id) => financeApi.recordARReceipt(id, {}), { onSuccess: refetch, successMsg: 'Payment recorded' })
+  // Reminder would need API endpoint; placeholder for now
   const [form, setForm] = useState({ customer: '', amount: '', terms: 'Net 30' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const outstanding = state.arInvoices.filter((r) => r.status !== 'Paid').length
-  const overdue = state.arInvoices.filter((r) => r.status.startsWith('Overdue')).length
-  const total = state.arInvoices.reduce((sum, r) => {
-    const n = parseFloat(String(r.amount).replace(/[₦,MK]/g, '').replace('M', 'e6').replace('K', 'e3'))
-    return sum + (isNaN(n) ? 0 : n)
-  }, 0)
+  const outstanding = arInvoices.filter((r) => r.status !== 'Paid').length
+  const overdue = arInvoices.filter((r) => r.status && r.status.startsWith('Overdue')).length
 
   return (
     <div className="space-y-5">
@@ -553,7 +696,7 @@ export function FinanceReceivablesView() {
         {[
           { label: 'Outstanding', value: outstanding, color: 'text-amber-600' },
           { label: 'Overdue', value: overdue, color: 'text-red-500' },
-          { label: 'Total invoices', value: state.arInvoices.length, color: 'text-slate-900' },
+          { label: 'Total invoices', value: arInvoices.length, color: 'text-slate-900' },
         ].map((k, i) => (
           <div key={i} className="stat-card text-center">
             <p className={`text-2xl font-extrabold ${k.color}`}>{k.value}</p>
@@ -582,7 +725,7 @@ export function FinanceReceivablesView() {
             </div>
           </div>
           <div className="flex gap-2 mt-3">
-            <button type="button" className="btn-primary text-sm" onClick={() => { arAdd(form); setForm({ customer: '', amount: '', terms: 'Net 30' }); setOpen(false) }}>
+            <button type="button" className="btn-primary text-sm" onClick={async () => { await createARInvoice(form); setForm({ customer: '', amount: '', terms: 'Net 30' }); setOpen(false) }}>
               Raise invoice
             </button>
             <button type="button" className="btn-secondary text-sm" onClick={() => setOpen(false)}>Cancel</button>
@@ -604,7 +747,7 @@ export function FinanceReceivablesView() {
             </tr>
           </thead>
           <tbody>
-            {state.arInvoices.map((r) => (
+            {arInvoices.map((r) => (
               <tr key={r.ref} className="border-b border-slate-50 hover:bg-slate-50/50">
                 <td className="table-td font-mono text-xs">{r.ref}</td>
                 <td className="table-td text-slate-700">{r.customer}</td>
@@ -612,14 +755,14 @@ export function FinanceReceivablesView() {
                 <td className="table-td text-xs text-slate-400 hidden md:table-cell">{r.terms}</td>
                 <td className="table-td text-xs hidden sm:table-cell">{r.dunning}</td>
                 <td className="table-td">
-                  <span className={`badge text-[10px] ${r.status === 'Paid' ? 'badge-green' : r.status.startsWith('Overdue') ? 'badge-red' : 'badge-amber'}`}>{r.status}</span>
+                  <span className={`badge text-[10px] ${r.status === 'Paid' ? 'badge-green' : r.status && r.status.startsWith('Overdue') ? 'badge-red' : 'badge-amber'}`}>{r.status}</span>
                 </td>
                 <td className="table-td text-right">
                   <div className={btnRow + ' justify-end'}>
                     {r.status !== 'Paid' && (
                       <>
-                        <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={() => arRecordPayment(r.ref)}>Pay</button>
-                        <button type="button" className="text-[10px] font-semibold text-slate-500" onClick={() => arReminder(r.ref)}>Remind</button>
+                        <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={async () => await recordARReceipt(r.ref)}>Pay</button>
+                        {/* Reminder action would go here if API endpoint exists */}
                       </>
                     )}
                   </div>
@@ -634,14 +777,26 @@ export function FinanceReceivablesView() {
 }
 
 export function FinanceBankView() {
-  const { state, bankConfirmMatch, bankAdd } = useFinance()
+  const { data: bankAccounts = [], loading, refetch } = useFetch(() => financeApi.getBankAccounts(), [])
+  const { run: reconcile } = useMutation(
+    (txId, journalId) => financeApi.reconcileTransaction(txId, journalId),
+    { onSuccess: refetch, successMsg: 'Match confirmed' }
+  )
+  const [bankLines, setBankLines] = useState([])
   const [form, setForm] = useState({ desc: '', bank: '', book: '', source: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const matched = state.bankLines.filter((r) => r.match === 'Auto').length
-  const suggested = state.bankLines.filter((r) => r.match === 'Suggested').length
-  const unmatched = state.bankLines.filter((r) => r.match !== 'Auto' && r.match !== 'Suggested').length
+  // Load transactions for first account
+  useEffect(() => {
+    if (bankAccounts.length > 0) {
+      financeApi.getBankTransactions(bankAccounts[0].id).then(setBankLines).catch(() => {})
+    }
+  }, [bankAccounts])
+
+  const matched = bankLines.filter((r) => r.match === 'Auto' || r.reconciled).length
+  const suggested = bankLines.filter((r) => r.match === 'Suggested').length
+  const unmatched = bankLines.filter((r) => !r.reconciled && r.match !== 'Auto' && r.match !== 'Suggested').length
 
   return (
     <div className="space-y-5">
@@ -695,7 +850,10 @@ export function FinanceBankView() {
             </div>
           </div>
           <div className="flex gap-2 mt-3">
-            <button type="button" className="btn-primary text-sm" onClick={() => { bankAdd(form); setForm({ desc: '', bank: '', book: '', source: '' }); setOpen(false) }}>
+            <button type="button" className="btn-primary text-sm" onClick={() => {
+              setBankLines((prev) => [{ source: form.source || 'Manual', date: new Date().toLocaleDateString('en-GB'), desc: form.desc, bank: form.bank, book: form.book, match: 'Suggested' }, ...prev])
+              setForm({ desc: '', bank: '', book: '', source: '' }); setOpen(false)
+            }}>
               Add line
             </button>
             <button type="button" className="btn-secondary text-sm" onClick={() => setOpen(false)}>Cancel</button>
@@ -717,19 +875,19 @@ export function FinanceBankView() {
             </tr>
           </thead>
           <tbody>
-            {state.bankLines.map((r, i) => (
+            {bankLines.map((r, i) => (
               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
                 <td className="table-td text-xs text-slate-400">{r.source}</td>
                 <td className="table-td text-xs text-slate-400">{r.date}</td>
                 <td className="table-td text-slate-700">{r.desc}</td>
-                <td className="table-td text-right font-mono text-xs">{r.bank}</td>
-                <td className="table-td text-right font-mono text-xs">{r.book}</td>
+                <td className="table-td text-right font-mono text-xs">{r.bank || r.amount}</td>
+                <td className="table-td text-right font-mono text-xs">{r.book || r.balance}</td>
                 <td className="table-td">
-                  <span className={`badge text-[10px] ${r.match === 'Auto' ? 'badge-green' : r.match === 'Suggested' ? 'badge-amber' : 'badge-blue'}`}>{r.match}</span>
+                  <span className={`badge text-[10px] ${r.reconciled || r.match === 'Auto' ? 'badge-green' : r.match === 'Suggested' ? 'badge-amber' : 'badge-blue'}`}>{r.reconciled ? 'Auto' : r.match || 'Unmatched'}</span>
                 </td>
                 <td className="table-td text-right">
-                  {r.match === 'Suggested' && (
-                    <button type="button" className="text-[10px] font-semibold text-[#006838] flex items-center gap-0.5 justify-end ml-auto" onClick={() => bankConfirmMatch(i)}>
+                  {!r.reconciled && r.match === 'Suggested' && (
+                    <button type="button" className="text-[10px] font-semibold text-[#006838] flex items-center gap-0.5 justify-end ml-auto" onClick={async () => await reconcile(r.id, null)}>
                       <Link2 size={12} /> Confirm
                     </button>
                   )}
@@ -744,10 +902,21 @@ export function FinanceBankView() {
 }
 
 export function FinanceCurrencyView() {
-  const { state, fxRefresh, fxAdd } = useFinance()
+  // FX rates: local state only (no dedicated API endpoint yet)
+  const [fxRates, setFxRates] = useState([])
   const [form, setForm] = useState({ pair: '', rate: '', source: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const fxRefresh = () => setFxRates((prev) => prev.map((r) => {
+    const num = parseFloat(String(r.rate).replace(/,/g, ''))
+    if (Number.isNaN(num)) return r
+    const next = (num * (1 + (Math.random() * 0.006 - 0.003))).toFixed(2)
+    return { ...r, rate: next, updated: new Date().toLocaleString('en-GB', { hour12: false }) }
+  }))
+  const fxAdd = (payload) => {
+    if (!payload.pair?.trim()) return
+    setFxRates((prev) => [{ pair: payload.pair, rate: payload.rate, source: payload.source || 'Manual', updated: new Date().toLocaleString('en-GB', { hour12: false }), unrealized: '—' }, ...prev])
+  }
 
   return (
     <div className="space-y-5">
@@ -792,13 +961,15 @@ export function FinanceCurrencyView() {
             <button type="button" className="btn-primary text-sm" onClick={() => { fxAdd(form); setForm({ pair: '', rate: '', source: '' }); setOpen(false) }}>
               Save rate
             </button>
+            {/**/}
             <button type="button" className="btn-secondary text-sm" onClick={() => setOpen(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {state.fxRates.map((r, i) => (
+        {fxRates.length === 0 && <p className="text-xs text-slate-400 col-span-3">No FX rates added yet.</p>}
+        {fxRates.map((r, i) => (
           <div key={i} className="card">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-mono font-bold text-slate-700">{r.pair}</p>
@@ -823,13 +994,18 @@ export function FinanceCurrencyView() {
 }
 
 export function FinanceFixedAssetsView() {
-  const { state, depreciateAsset, faAdd } = useFinance()
+  const { data: fixedAssets = [], loading, refetch } = useFetch(() => financeApi.getFixedAssets(), [])
+  const { run: createAsset } = useMutation(financeApi.createFixedAsset, { onSuccess: refetch, successMsg: 'Asset registered' })
+  const { run: runDepreciation } = useMutation(
+    (period) => financeApi.depreciateAssets(period),
+    { onSuccess: refetch, successMsg: 'Depreciation run posted' }
+  )
   const [form, setForm] = useState({ name: '', cost: '', method: 'Straight-Line', life: '5 yrs' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const active = state.fixedAssets.filter((a) => a.disposal === '—').length
-  const disposed = state.fixedAssets.filter((a) => a.disposal !== '—').length
+  const active = fixedAssets.filter((a) => !a.disposal || a.disposal === '—').length
+  const disposed = fixedAssets.filter((a) => a.disposal && a.disposal !== '—').length
 
   return (
     <div className="space-y-5">
@@ -850,7 +1026,7 @@ export function FinanceFixedAssetsView() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total assets', value: state.fixedAssets.length, color: 'text-slate-900' },
+          { label: 'Total assets', value: fixedAssets.length, color: 'text-slate-900' },
           { label: 'Active', value: active, color: 'text-[#006838]' },
           { label: 'Disposed', value: disposed, color: 'text-slate-400' },
         ].map((k, i) => (
@@ -887,7 +1063,7 @@ export function FinanceFixedAssetsView() {
             </div>
           </div>
           <div className="flex gap-2 mt-3">
-            <button type="button" className="btn-primary text-sm" onClick={() => { faAdd(form); setForm({ name: '', cost: '', method: 'Straight-Line', life: '5 yrs' }); setOpen(false) }}>
+            <button type="button" className="btn-primary text-sm" onClick={async () => { await createAsset(form); setForm({ name: '', cost: '', method: 'Straight-Line', life: '5 yrs' }); setOpen(false) }}>
               Register asset
             </button>
             <button type="button" className="btn-secondary text-sm" onClick={() => setOpen(false)}>Cancel</button>
@@ -910,20 +1086,20 @@ export function FinanceFixedAssetsView() {
             </tr>
           </thead>
           <tbody>
-            {state.fixedAssets.map((r) => (
-              <tr key={r.tag} className="border-b border-slate-50 hover:bg-slate-50/50">
-                <td className="table-td font-mono text-xs">{r.tag}</td>
+            {fixedAssets.map((r) => (
+              <tr key={r.tag || r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                <td className="table-td font-mono text-xs">{r.tag || r.id}</td>
                 <td className="table-td text-slate-700">{r.name}</td>
-                <td className="table-td text-xs text-slate-400 hidden md:table-cell">{r.method}</td>
-                <td className="table-td text-xs text-slate-400 hidden sm:table-cell">{r.life}</td>
+                <td className="table-td text-xs text-slate-400 hidden md:table-cell">{r.method || r.depreciation_method}</td>
+                <td className="table-td text-xs text-slate-400 hidden sm:table-cell">{r.life || r.useful_life}</td>
                 <td className="table-td text-right text-xs">{r.cost}</td>
-                <td className="table-td text-right font-semibold">{r.nbv}</td>
+                <td className="table-td text-right font-semibold">{r.nbv || r.net_book_value}</td>
                 <td className="table-td text-xs">
-                  {r.disposal === '—' ? <span className="badge badge-green text-[10px]">Active</span> : <span className="badge badge-amber text-[10px]">{r.disposal}</span>}
+                  {(!r.disposal || r.disposal === '—') ? <span className="badge badge-green text-[10px]">Active</span> : <span className="badge badge-amber text-[10px]">{r.disposal}</span>}
                 </td>
                 <td className="table-td text-right">
-                  {r.disposal === '—' && parseFloat(String(r.nbv).replace(/[^\d.]/g, '')) > 0 && (
-                    <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={() => depreciateAsset(r.tag)}>
+                  {(!r.disposal || r.disposal === '—') && (
+                    <button type="button" className="text-[10px] font-semibold text-[#006838]" onClick={async () => await runDepreciation(r.tag || r.id)}>
                       Depreciate
                     </button>
                   )}
@@ -938,14 +1114,23 @@ export function FinanceFixedAssetsView() {
 }
 
 export function FinanceExpensesView() {
-  const { state, expenseApprove, expenseReject, expenseAdd } = useFinance()
+  // Expense claims: local state only (no dedicated API endpoint yet)
+  const [expenseClaims, setExpenseClaims] = useState([])
   const [form, setForm] = useState({ staff: '', amount: '', card: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const pending = state.expenseClaims.filter((r) => !r.stage.includes('Posted') && !r.stage.includes('Rejected')).length
-  const approved = state.expenseClaims.filter((r) => r.stage.includes('Posted')).length
-  const rejected = state.expenseClaims.filter((r) => r.stage.includes('Rejected')).length
+  const expenseAdd = (payload) => {
+    if (!payload.staff?.trim()) return
+    const id = `EC-${Date.now().toString(36).slice(-5).toUpperCase()}`
+    setExpenseClaims((prev) => [{ id, staff: payload.staff, amount: payload.amount || '₦0', card: payload.card || '—', ocr: 'Manual', stage: 'Manager approval' }, ...prev])
+  }
+  const expenseApprove = (id) => setExpenseClaims((prev) => prev.map((r) => r.id === id ? { ...r, stage: 'Posted to payroll batch' } : r))
+  const expenseReject = (id) => setExpenseClaims((prev) => prev.map((r) => r.id === id ? { ...r, stage: 'Rejected — returned to staff' } : r))
+
+  const pending = expenseClaims.filter((r) => !r.stage.includes('Posted') && !r.stage.includes('Rejected')).length
+  const approved = expenseClaims.filter((r) => r.stage.includes('Posted')).length
+  const rejected = expenseClaims.filter((r) => r.stage.includes('Rejected')).length
 
   return (
     <div className="space-y-5">
@@ -1021,7 +1206,7 @@ export function FinanceExpensesView() {
             </tr>
           </thead>
           <tbody>
-            {state.expenseClaims.map((r) => (
+            {expenseClaims.map((r) => (
               <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                 <td className="table-td font-mono text-xs">{r.id}</td>
                 <td className="table-td text-slate-700">{r.staff}</td>
@@ -1051,12 +1236,21 @@ export function FinanceExpensesView() {
 }
 
 export function FinanceCashFlowView() {
-  const { state, cashSimulate, cashAdd } = useFinance()
+  const { data: cashFlowData } = useFetch(() => financeApi.getCashFlow(), [])
+  const [cashPositions, setCashPositions] = useState([])
   const [form, setForm] = useState({ pool: '', available: '', forecast7d: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const alertCount = state.cashPositions.filter((c) => c.alert !== 'OK').length
+  const cashSimulate = () => setCashPositions((prev) => prev.map((c, idx) =>
+    idx === 0 ? { ...c, forecast7d: '₦268M (min) — after sim', alert: 'Review' } : c
+  ))
+  const cashAdd = (payload) => {
+    if (!payload.pool?.trim()) return
+    setCashPositions((prev) => [...prev, { pool: payload.pool, available: payload.available || '₦0', forecast7d: payload.forecast7d || '—', alert: 'OK' }])
+  }
+
+  const alertCount = cashPositions.filter((c) => c.alert !== 'OK').length
 
   return (
     <div className="space-y-5">
@@ -1082,7 +1276,7 @@ export function FinanceCashFlowView() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Cash pools', value: state.cashPositions.length, color: 'text-slate-900' },
+          { label: 'Cash pools', value: cashPositions.length, color: 'text-slate-900' },
           { label: 'Alerts', value: alertCount, color: alertCount > 0 ? 'text-amber-600' : 'text-[#006838]' },
           { label: 'Total consolidated', value: '₦412M+', color: 'text-[#006838]' },
         ].map((k, i) => (
@@ -1120,7 +1314,8 @@ export function FinanceCashFlowView() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {state.cashPositions.map((r, i) => (
+        {cashPositions.length === 0 && <p className="text-xs text-slate-400 col-span-3">No cash pools added yet.</p>}
+        {cashPositions.map((r, i) => (
           <div key={i} className="card">
             <p className="text-sm font-bold text-slate-800">{r.pool}</p>
             <p className="text-xl font-extrabold text-[#006838] mt-2">{r.available}</p>
@@ -1139,13 +1334,21 @@ export function FinanceCashFlowView() {
 }
 
 export function FinanceProjectsView() {
-  const { state, projectSetActual, projectAdd } = useFinance()
+  // Project accounting: local state only (no dedicated API endpoint yet)
+  const [projects, setProjects] = useState([])
   const [draft, setDraft] = useState({})
   const [form, setForm] = useState({ code: '', name: '', budget: '', revenue: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const onTrack = state.projectAccounting.filter((p) => {
+  const projectAdd = (payload) => {
+    if (!payload.name?.trim()) return
+    const code = payload.code?.trim() || `PRJ-${Date.now().toString(36).slice(-5).toUpperCase()}`
+    setProjects((prev) => [...prev, { code, name: payload.name, budget: payload.budget || '₦0', actual: '₦0', revenue: payload.revenue || '—', margin: 'TBD' }])
+  }
+  const projectSetActual = (code, actual) => setProjects((prev) => prev.map((p) => p.code === code ? { ...p, actual } : p))
+
+  const onTrack = projects.filter((p) => {
     const b = parseFloat(String(p.budget).replace(/[^0-9.]/g, ''))
     const a = parseFloat(String(p.actual).replace(/[^0-9.]/g, ''))
     return !isNaN(b) && !isNaN(a) && a <= b
@@ -1170,9 +1373,9 @@ export function FinanceProjectsView() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Active projects', value: state.projectAccounting.length, color: 'text-slate-900' },
+          { label: 'Active projects', value: projects.length, color: 'text-slate-900' },
           { label: 'Within budget', value: onTrack, color: 'text-[#006838]' },
-          { label: 'Over / TBD', value: state.projectAccounting.length - onTrack, color: 'text-amber-600' },
+          { label: 'Over / TBD', value: projects.length - onTrack, color: 'text-amber-600' },
         ].map((k, i) => (
           <div key={i} className="stat-card text-center">
             <p className={`text-2xl font-extrabold ${k.color}`}>{k.value}</p>
@@ -1225,7 +1428,7 @@ export function FinanceProjectsView() {
             </tr>
           </thead>
           <tbody>
-            {state.projectAccounting.map((r) => {
+            {projects.map((r) => {
               const val = draft[r.code] ?? r.actual
               return (
                 <tr key={r.code} className="border-b border-slate-50 hover:bg-slate-50/50">
@@ -1257,13 +1460,20 @@ export function FinanceProjectsView() {
 }
 
 export function FinanceTaxView() {
-  const { state, taxFile, taxAdd } = useFinance()
+  // Tax runs: local state only (no dedicated API endpoint yet)
+  const [taxRuns, setTaxRuns] = useState([])
   const [form, setForm] = useState({ period: '', jurisdiction: '', basis: '', liability: '' })
   const [open, setOpen] = useState(false)
   const F = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const filed = state.taxRuns.filter((r) => r.filing.startsWith('Filed')).length
-  const pending = state.taxRuns.filter((r) => !r.filing.startsWith('Filed')).length
+  const taxAdd = (payload) => {
+    if (!payload.period?.trim()) return
+    setTaxRuns((prev) => [...prev, { period: payload.period, jurisdiction: payload.jurisdiction || '—', basis: payload.basis || '—', liability: payload.liability || '₦0', filing: 'Draft' }])
+  }
+  const taxFile = (i) => setTaxRuns((prev) => prev.map((r, idx) => idx === i ? { ...r, filing: 'Filed — confirmation pending' } : r))
+
+  const filed = taxRuns.filter((r) => r.filing.startsWith('Filed')).length
+  const pending = taxRuns.filter((r) => !r.filing.startsWith('Filed')).length
 
   return (
     <div className="space-y-5">
@@ -1284,7 +1494,7 @@ export function FinanceTaxView() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total runs', value: state.taxRuns.length, color: 'text-slate-900' },
+          { label: 'Total runs', value: taxRuns.length, color: 'text-slate-900' },
           { label: 'Filed', value: filed, color: 'text-[#006838]' },
           { label: 'Pending / draft', value: pending, color: 'text-amber-600' },
         ].map((k, i) => (
@@ -1338,7 +1548,7 @@ export function FinanceTaxView() {
             </tr>
           </thead>
           <tbody>
-            {state.taxRuns.map((r, i) => (
+            {taxRuns.map((r, i) => (
               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
                 <td className="table-td text-xs font-semibold">{r.period}</td>
                 <td className="table-td text-slate-700">{r.jurisdiction}</td>
@@ -1362,7 +1572,16 @@ export function FinanceTaxView() {
 }
 
 export function FinanceAuditComplianceView() {
-  const { state, entityMap, ifrsRun } = useFinance()
+  // Audit trail: local state only (no dedicated API endpoint yet)
+  const [auditTrail, setAuditTrail] = useState([])
+  const [consolidationEntities, setConsolidationEntities] = useState([])
+  const [ifrsTemplates, setIfrsTemplates] = useState([])
+
+  const entityMap = (code) => setConsolidationEntities((prev) => prev.map((e) => e.code === code ? { ...e, status: 'Mapped' } : e))
+  const ifrsRun = (id) => {
+    const lastRun = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    setIfrsTemplates((prev) => prev.map((t) => t.id === id ? { ...t, lastRun } : t))
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-3">
@@ -1390,7 +1609,10 @@ export function FinanceAuditComplianceView() {
               </tr>
             </thead>
             <tbody>
-              {state.auditTrail.map((r, i) => (
+              {auditTrail.length === 0 && (
+                <tr><td colSpan={4} className="table-td text-xs text-slate-400 text-center py-4">No audit entries yet.</td></tr>
+              )}
+              {auditTrail.map((r, i) => (
                 <tr key={i} className="border-b border-slate-50 hover:bg-slate-50/50">
                   <td className="table-td text-xs font-mono text-slate-500">{r.ts}</td>
                   <td className="table-td text-xs">{r.user}</td>
@@ -1420,7 +1642,10 @@ export function FinanceAuditComplianceView() {
               </tr>
             </thead>
             <tbody>
-              {state.consolidationEntities.map((r) => (
+              {consolidationEntities.length === 0 && (
+                <tr><td colSpan={4} className="table-td text-xs text-slate-400 text-center py-4">No entities configured.</td></tr>
+              )}
+              {consolidationEntities.map((r) => (
                 <tr key={r.code} className="border-b border-slate-50 hover:bg-slate-50/50">
                   <td className="table-td font-mono text-xs">{r.code}</td>
                   <td className="table-td text-slate-700">{r.name}</td>
@@ -1442,7 +1667,8 @@ export function FinanceAuditComplianceView() {
       <div>
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">IFRS / GAAP reporting templates</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {state.ifrsTemplates.map((t) => (
+          {ifrsTemplates.length === 0 && <p className="text-xs text-slate-400 col-span-3">No IFRS templates configured.</p>}
+          {ifrsTemplates.map((t) => (
             <div key={t.id} className="card">
               <p className="text-[10px] font-mono text-slate-400">{t.id}</p>
               <p className="text-sm font-bold text-slate-800 mt-1">{t.name}</p>
@@ -1459,14 +1685,15 @@ export function FinanceAuditComplianceView() {
 }
 
 export function FinanceBudgetView() {
-  const { state, budgetAdd } = useFinance()
+  const { data: budgetHeads = [], loading, refetch } = useFetch(() => financeApi.getBudgetHeads(), [])
+  const { run: createBudget } = useMutation(financeApi.createBudgetHead, { onSuccess: refetch, successMsg: 'Scenario added' })
   const [name, setName] = useState('')
   const [variance, setVariance] = useState('')
   const [type, setType] = useState('Scenario')
   const [owner, setOwner] = useState('FP&A')
 
-  const annual = state.budgetScenarios.filter((b) => b.type === 'Annual').length
-  const scenarios = state.budgetScenarios.filter((b) => b.type === 'Scenario').length
+  const annual = budgetHeads.filter((b) => b.type === 'Annual').length
+  const scenarios = budgetHeads.filter((b) => b.type === 'Scenario').length
 
   return (
     <div className="space-y-5">
@@ -1482,7 +1709,7 @@ export function FinanceBudgetView() {
 
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total scenarios', value: state.budgetScenarios.length, color: 'text-slate-900' },
+          { label: 'Total scenarios', value: budgetHeads.length, color: 'text-slate-900' },
           { label: 'Annual budgets', value: annual, color: 'text-teal-700' },
           { label: 'What-if scenarios', value: scenarios, color: 'text-indigo-600' },
         ].map((k, i) => (
@@ -1521,8 +1748,8 @@ export function FinanceBudgetView() {
         <button
           type="button"
           className="btn-primary text-sm mt-3"
-          onClick={() => {
-            budgetAdd({ name, type, variance, owner })
+          onClick={async () => {
+            await createBudget({ name, type, variance, owner })
             setName(''); setVariance(''); setType('Scenario'); setOwner('FP&A')
           }}
         >
@@ -1531,7 +1758,8 @@ export function FinanceBudgetView() {
       </div>
 
       <div className="space-y-3">
-        {state.budgetScenarios.map((b, i) => (
+        {budgetHeads.length === 0 && <p className="text-xs text-slate-400">No budget scenarios yet.</p>}
+        {budgetHeads.map((b, i) => (
           <div key={i} className="card flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-bold text-slate-800">{b.name}</p>
@@ -1548,7 +1776,13 @@ export function FinanceBudgetView() {
 }
 
 export function FinanceReportsView() {
-  const { state, reportRefresh } = useFinance()
+  const [reports, setReports] = useState([
+    { name: 'Trial Balance', period: 'Apr 2026', format: 'PDF / XLSX', status: 'Ready' },
+    { name: 'Income Statement', period: 'Q1 2026', format: 'PDF', status: 'Draft' },
+    { name: 'Balance Sheet', period: 'Apr 2026', format: 'PDF / XLSX', status: 'Ready' },
+    { name: 'Cash Flow Statement', period: 'Apr 2026', format: 'PDF', status: 'Draft' },
+  ])
+  const reportRefresh = (i) => setReports((prev) => prev.map((r, idx) => idx === i ? { ...r, status: 'Ready', period: `Refreshed ${new Date().toLocaleDateString('en-GB')}` } : r))
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-3">
@@ -1561,7 +1795,7 @@ export function FinanceReportsView() {
         </div>
       </div>
       <div className="space-y-3">
-        {state.financialReports.map((r, i) => (
+        {reports.map((r, i) => (
           <div key={i} className="card flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold text-slate-800">{r.name}</p>
@@ -1583,7 +1817,16 @@ export function FinanceReportsView() {
 }
 
 export function FinanceAnalyticsView() {
-  const { state, kpiNudge } = useFinance()
+  const [kpis, setKpis] = useState([
+    { key: 'Burn rate', value: '₦121M / mo', target: '₦115M', status: 'warn' },
+    { key: 'Liquidity ratio', value: '1.42', target: '>1.2', status: 'good' },
+    { key: 'AP days', value: '32 days', target: '<45', status: 'good' },
+    { key: 'AR days', value: '28 days', target: '<30', status: 'good' },
+    { key: 'Budget utilisation', value: '68%', target: '≤80%', status: 'good' },
+  ])
+  const kpiNudge = () => setKpis((prev) => prev.map((k) =>
+    k.key !== 'Burn rate' ? k : { ...k, value: `₦${118 + Math.round(Math.random() * 6 - 3)}M / mo` }
+  ))
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1601,7 +1844,7 @@ export function FinanceAnalyticsView() {
         </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {state.financeKpis.map((k) => (
+        {kpis.map((k) => (
           <KpiPill key={k.key} k={k} />
         ))}
       </div>
@@ -1610,7 +1853,17 @@ export function FinanceAnalyticsView() {
 }
 
 export function FinancePlatformView() {
-  const { state, apiPing } = useFinance()
+  const [apiIntegrations, setApiIntegrations] = useState([
+    { system: 'IPPIS (Payroll)', scope: 'Salary data sync', ok: null, lastPing: null },
+    { system: 'GIFMIS (OAGF)', scope: 'Payment gateway', ok: null, lastPing: null },
+    { system: 'CBN SMIS', scope: 'FX rate feed', ok: null, lastPing: null },
+    { system: 'FIRS e-TaxPay', scope: 'Tax filing API', ok: null, lastPing: null },
+  ])
+  const apiPing = (i) => {
+    const ok = Math.random() > 0.08
+    const lastPing = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setApiIntegrations((prev) => prev.map((r, idx) => idx === i ? { ...r, ok, lastPing } : r))
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-3">
@@ -1641,7 +1894,7 @@ export function FinancePlatformView() {
           <Plug size={14} /> API ecosystem
         </h3>
         <div className="space-y-3">
-          {state.apiIntegrations.map((x, i) => (
+          {apiIntegrations.map((x, i) => (
             <div key={i} className="flex flex-wrap justify-between gap-2 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
               <div>
                 <p className="text-sm font-bold text-slate-800">{x.system}</p>

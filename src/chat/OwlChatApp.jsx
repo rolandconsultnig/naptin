@@ -7,6 +7,7 @@ import {
   isChatEnvForcedOffline,
   isChatForcedOffline,
 } from './chatConfig'
+import { ensureOwlTalkSession } from './owlTalkSession'
 import { useChatSocket } from './ChatSocketContext'
 import { useChatCall } from './ChatCallContext'
 import { Search, MoreVertical, Smile, Paperclip, Send, Phone, Video, MessageCircle, Shield, Edit2, Trash2, Check, CheckCheck, Reply, Forward, Mic, Star, Archive, X, Play, Users, Settings } from 'lucide-react'
@@ -34,17 +35,17 @@ function sameChatUser(a, b) {
 export function OwlChatApp() {
   const { user, logout } = useAuth()
   const { addNotification } = useNotifications()
-  const { socket, connected, sendMessage, joinChat, startTyping, stopTyping } = useChatSocket()
+  const { socket, connected, owlTalkUser, sendMessage, joinChat, startTyping, stopTyping } = useChatSocket()
   const { startCall } = useChatCall()
   const owlUser = useMemo(
     () => ({
-      id: user?.chatUserId ?? 1,
-      username: user?.name || user?.email || 'User',
-      email: user?.email,
-      profile_picture: user?.profile_picture,
+      id: owlTalkUser?.id ?? user?.chatUserId ?? 1,
+      username: owlTalkUser?.username || user?.name || user?.email || 'User',
+      email: owlTalkUser?.email || user?.email,
+      profile_picture: owlTalkUser?.profile_picture || user?.profile_picture,
       is_admin: user?.roleKey === 'director' || user?.roleKey === 'ict_admin',
     }),
-    [user]
+    [user, owlTalkUser]
   )
   const navigate = useNavigate()
   const [messages, setMessages] = useState([])
@@ -88,46 +89,8 @@ export function OwlChatApp() {
     }))
 
   const usersLoadWarnedRef = useRef(false)
-  const chatAuthDoneRef = useRef(false)
 
-  /**
-   * Auto-register / login the portal user into the chat backend so every
-   * request has a valid Flask session cookie.  This runs once per mount.
-   * Password is deterministic: "naptin-chat-" + first 8 chars of email hash.
-   */
-  const ensureChatAuth = async () => {
-    if (chatAuthDoneRef.current || isChatForcedOffline()) return
-    try {
-      // Already authenticated?
-      const me = await axios.get(`${getApiBase()}/me`, { withCredentials: true })
-      if (me.status === 200) { chatAuthDoneRef.current = true; return }
-    } catch { /* not authenticated yet */ }
-
-    const username = user?.name || user?.email?.split('@')[0] || 'naptin-user'
-    const email    = user?.email || `${username}@naptin.gov.ng`
-    // Simple deterministic password so the same user always gets the same creds
-    let hash = 0
-    for (let i = 0; i < email.length; i++) hash = (Math.imul(31, hash) + email.charCodeAt(i)) | 0
-    const password = `naptin-${Math.abs(hash).toString(36)}`
-
-    try {
-      await axios.post(`${getApiBase()}/login`, { username, password }, { withCredentials: true })
-      chatAuthDoneRef.current = true
-    } catch (loginErr) {
-      if (loginErr?.response?.status === 401) {
-        // User doesn't exist yet — register them
-        try {
-          await axios.post(`${getApiBase()}/register`, { username, email, password }, { withCredentials: true })
-          chatAuthDoneRef.current = true
-        } catch (regErr) {
-          // Ignore — if registration fails (duplicate etc.) the next login attempt will work
-          chatAuthDoneRef.current = true
-        }
-      }
-    }
-  }
-
-  // Load users: try live API (default :5117 HTTPS), else fall back to STAFF so the sidebar is never empty
+  // Load users: try live API (production :4003; dev may use Vite proxy), else fall back to STAFF
   useEffect(() => {
     if (!user) return
 
@@ -136,10 +99,10 @@ export function OwlChatApp() {
       return
     }
 
-    const myChatId = user?.chatUserId ?? 1
+    const myChatId = owlTalkUser?.id ?? user?.chatUserId ?? 1
 
     const loadUsers = async () => {
-      await ensureChatAuth()
+      await ensureOwlTalkSession(user)
       try {
         const response = await axios.get(`${getApiBase()}/users`, {
           withCredentials: true,
@@ -169,11 +132,11 @@ export function OwlChatApp() {
         if (!usersLoadWarnedRef.current) {
           usersLoadWarnedRef.current = true
           console.warn(
-            'Chat user list: server unavailable — using directory preview. Start dev/main.py on :5117 and restart Vite (dev uses /proxy-chat-api → 127.0.0.1:5117).',
+            'Chat user list: server unavailable — using directory preview. Start Owl Talk (dev/main.py on :4003), open firewall TCP 4003, and ensure PM2 app naptin-chat is running. Dev: Vite proxies /proxy-chat-api → 127.0.0.1:4003.',
             error?.message || error
           )
           toast.error(
-            'Cannot reach chat server — using directory preview. Run Python on port 5117, then restart npm run dev (Vite proxies chat in development).',
+            'Cannot reach chat server (port 4003). On the server: create dev/venv, pip install -r dev/requirements.txt, pm2 restart naptin-chat, open port 4003. Using directory preview.',
             { id: 'chat-users-fallback' }
           )
         }
@@ -181,7 +144,7 @@ export function OwlChatApp() {
     }
 
     loadUsers()
-  }, [user?.email, user?.chatUserId])
+  }, [user?.email, user?.chatUserId, owlTalkUser?.id])
 
   // Socket.IO event handlers
   useEffect(() => {
@@ -300,6 +263,12 @@ export function OwlChatApp() {
       socket.off('user_typing')
     }
   }, [socket, selectedChat, addNotification, owlUser.id])
+
+  useEffect(() => {
+    if (connected && selectedChat && !isChatForcedOffline()) {
+      joinChat(selectedChat.id)
+    }
+  }, [connected, selectedChat?.id, joinChat])
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -504,7 +473,7 @@ export function OwlChatApp() {
         const blob = new Blob(chunks, { type: 'audio/webm' })
 
         if (isChatForcedOffline() || !connected) {
-          toast.error('Voice messages need the chat server running and connected (port 5117).')
+          toast.error('Voice messages need the chat server running and connected (Owl Talk on port 4003).')
           stream.getTracks().forEach((track) => track.stop())
           return
         }
@@ -572,8 +541,8 @@ export function OwlChatApp() {
 
     if (isChatForcedOffline()) {
       const offlineNotice = isChatEnvForcedOffline()
-        ? 'Forced offline mode (VITE_CHAT_OFFLINE) — messages stay in this browser tab only.'
-        : 'Chat server is currently unavailable — messages stay in this browser tab only.'
+        ? 'Offline mode — messages stay in this browser only until you reconnect.'
+        : 'Chat server is unavailable — messages stay in this browser only until you reconnect.'
 
       setMessages([
         {
@@ -777,7 +746,7 @@ export function OwlChatApp() {
     if (!file) return
 
     if (isChatForcedOffline()) {
-      toast.error('File upload needs the chat server. Remove VITE_CHAT_OFFLINE or run dev/ on port 5117.')
+      toast.error('File upload needs the chat server. Turn off offline mode or try again when the chat service is running.')
       e.target.value = ''
       return
     }

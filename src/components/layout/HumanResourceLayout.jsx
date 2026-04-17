@@ -2,11 +2,12 @@ import { NavLink, Outlet, Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { canAccessHRStaffTabs } from '../../auth/departmentAccess'
 import { NAPTIN_LOGO } from '../../assets/images'
-import { Users, Contact, UsersRound, LayoutGrid, ClipboardList } from 'lucide-react'
+import { Users, Contact, UsersRound, LayoutGrid, ClipboardList, BriefcaseBusiness } from 'lucide-react'
 
 const STAFF_TABS = [
   { to: '/app/human-resource/people', label: 'People', icon: Users, end: false },
   { to: '/app/human-resource/directory', label: 'Directory', icon: Contact, end: false },
+  { to: '/app/human-resource/recruitment', label: 'Recruitment', icon: BriefcaseBusiness, end: false },
   { to: '/app/human-resource/operations', label: 'Operations', icon: UsersRound, end: false },
   { to: '/app/human-resource/enterprise', label: 'Enterprise HRMS', icon: LayoutGrid, end: false },
 ]

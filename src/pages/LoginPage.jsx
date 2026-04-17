@@ -202,7 +202,7 @@ export default function LoginPage() {
           </div>
 
           <div style={{marginTop:16,padding:'11px 15px',background:'#F0F7F0',border:'1px solid #C8E6C8',borderRadius:11}}>
-            <div style={{fontSize:9.5,fontWeight:700,color:'#006838',letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Demo accounts (password naptin2026)</div>
+            <div style={{fontSize:9.5,fontWeight:700,color:'#006838',letterSpacing:0.5,textTransform:'uppercase',marginBottom:6}}>Example accounts · password naptin2026</div>
             <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:'#555',lineHeight:1.65}}>
               staff@naptin.gov.ng — staff<br/>
               hod@naptin.gov.ng — HOD<br/>

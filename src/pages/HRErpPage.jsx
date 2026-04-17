@@ -12,6 +12,7 @@ import {
 } from '../data/mock'
 import { Link } from 'react-router-dom'
 import { Briefcase, Banknote, TrendingUp, Clock, UserPlus, Target, RefreshCw } from 'lucide-react'
+import { hrmsApi } from '../services/hrmsService'
 
 const TABS = [
   { id: 'recruitment', label: 'Recruitment', icon: Briefcase },
@@ -22,7 +23,6 @@ const TABS = [
   { id: 'attendance', label: 'Attendance', icon: Clock },
 ]
 
-const ONBOARD_STAGES = ['Offer accepted', 'Pre-joining', 'Day 1 complete', '90-day review']
 const PIPELINE_STATUS_OPTIONS = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected']
 const TASK_STATUS_OPTIONS = ['pending', 'in_progress', 'completed', 'blocked']
 const JOB_STATUS_OPTIONS = ['open', 'paused', 'closed']
@@ -38,6 +38,7 @@ export default function HRErpPage() {
   const [newJobTitle, setNewJobTitle] = useState('')
   const [newJobDept, setNewJobDept] = useState('')
   const [isCreatingJob, setIsCreatingJob] = useState(false)
+  const [isCreatingStarterJob, setIsCreatingStarterJob] = useState(false)
   const [candidateJobId, setCandidateJobId] = useState('')
   const [candidateName, setCandidateName] = useState('')
   const [candidateEmail, setCandidateEmail] = useState('')
@@ -213,80 +214,56 @@ export default function HRErpPage() {
 
   const loadStage3Ops = async () => {
     try {
-      const [
-        payrollData,
-        attendanceData,
-        leaveData,
-        workforceData,
-        leaveBalanceData,
-        leavePolicyData,
-        leaveAccrualData,
-        postingConfigData,
-        auditData,
-      ] = await Promise.all([
-        fetchJson('/api/hrms/payroll-runs'),
-        fetchJson('/api/hrms/attendance-summary'),
-        fetchJson('/api/hrms/leave-requests'),
-        fetchJson('/api/hrms/workforce-analytics'),
-        fetchJson('/api/hrms/leave-balances'),
-        fetchJson('/api/hrms/leave-policy'),
-        fetchJson('/api/hrms/leave-accrual-preview'),
-        fetchJson('/api/hrms/payroll-posting-config'),
-        fetchJson('/api/hrms/audit-trail?limit=20'),
+      const [periods, leaves, attSummary] = await Promise.all([
+        hrmsApi.getPayrollPeriods().catch(() => []),
+        hrmsApi.getLeaveRequests({ limit: 120 }).catch(() => []),
+        hrmsApi.getAttendanceSummary().catch(() => null),
       ])
 
-      const payrollItems = (payrollData.items || []).map((row) => {
-        const gross = Number(row.gross_total || 0)
-        const deductions = Number(row.deductions_total || 0)
-        const variance = gross > 0 ? `${((deductions / gross) * 100).toFixed(2)}%` : '0.00%'
-        return {
-          id: row.id,
-          statusKey: row.status,
-          period: row.period_label,
-          status: row.status ? `${row.status.charAt(0).toUpperCase()}${row.status.slice(1)}` : 'Processed',
-          payDate: row.pay_date ? new Date(row.pay_date).toLocaleDateString() : '—',
-          staffPaid: row.staff_paid ?? 0,
-          net: `₦${Number(row.net_total || 0).toLocaleString()}`,
-          variance,
-        }
-      })
-
-      const attendanceItems = (attendanceData.items || []).map((row) => ({
-        site: row.site,
-        present: row.present,
-        expected: row.expected,
-        rate: row.rate,
-      }))
-
-      const leaveBalanceItems = (leaveBalanceData.items || []).map((row) => ({
-        employeeId: row.employee_id,
-        employeeName: row.employee_name,
-        department: row.department,
-        annualRemaining: row?.remaining?.annual ?? 0,
-        sickRemaining: row?.remaining?.sick ?? 0,
-        studyRemaining: row?.remaining?.study ?? 0,
-        totalUsed: row.total_used ?? 0,
-      }))
-
-      const leaveItems = (leaveData.items || []).map((row) => ({
+      const payrollItems = (Array.isArray(periods) ? periods : []).map((row) => ({
         id: row.id,
-        leaveType: row.leave_type,
-        status: row.status,
-        startDate: row.start_date,
-        endDate: row.end_date,
-        durationDays: row.duration_days,
+        statusKey: row.status,
+        period: row.label,
+        status: row.status ? `${String(row.status).charAt(0).toUpperCase()}${String(row.status).slice(1)}` : 'Draft',
+        payDate: row.payDate ? new Date(row.payDate).toLocaleDateString() : '—',
+        staffPaid: '—',
+        net: '—',
+        variance: '—',
       }))
+
+      const leaveItems = (Array.isArray(leaves) ? leaves : []).map((row) => ({
+        id: row.id,
+        leaveType: row.leaveType,
+        status: row.status,
+        startDate: row.startDate,
+        endDate: row.endDate,
+        durationDays: row.daysRequested,
+      }))
+
+      let attendanceItems = []
+      if (attSummary?.today) {
+        const t = attSummary.today
+        const tot = t.total_today || t.present || 0
+        attendanceItems = [
+          {
+            site: 'Organisation (today)',
+            present: t.present ?? 0,
+            expected: tot,
+            rate: tot ? `${Math.round((100 * (t.present || 0)) / Math.max(1, tot))}%` : '—',
+          },
+        ]
+      }
 
       setPayrollRows(payrollItems.length ? payrollItems : PAYROLL_RUNS)
       setAttendanceRows(attendanceItems.length ? attendanceItems : ATTENDANCE_DAILY)
       setLeaveRows(leaveItems)
-      setLeaveBalanceRows(leaveBalanceItems)
-      setAttendanceOvertimeHours(attendanceData.overtime_hours ?? 0)
-      setLeavePolicy(leavePolicyData.policy || null)
-      setLeaveAccrualRows(leaveAccrualData.items || [])
-      setPostingConfig(postingConfigData.config || { posting_mode: 'manual', auto_post_on_publish: false, journal_target: 'general-ledger' })
-      setAuditTrailRows(auditData.items || [])
-      setWorkforceAnalytics(workforceData.analytics || null)
+      setLeaveBalanceRows([])
+      setAttendanceOvertimeHours(attSummary?.totalOvertimeThisWeek ? Number(attSummary.totalOvertimeThisWeek) : 0)
+      setLeavePolicy(null)
+      setLeaveAccrualRows([])
+      setPostingConfig({ posting_mode: 'manual', auto_post_on_publish: false, journal_target: 'general-ledger' })
+      setAuditTrailRows([])
+      setWorkforceAnalytics(null)
     } catch {
       setPayrollRows(PAYROLL_RUNS)
       setAttendanceRows(ATTENDANCE_DAILY)
@@ -325,18 +302,19 @@ export default function HRErpPage() {
   }
 
   const handleUpdateLeaveStatus = async (leaveRequestId, nextStatus) => {
-    if (!leaveRequestId || !LEAVE_STATUS_OPTIONS.includes(nextStatus)) return
+    if (!leaveRequestId || !['approved', 'rejected'].includes(nextStatus)) return
     setIsUpdatingLeaveStatus(true)
     try {
-      await fetchJson(`/api/hrms/leave-requests/${leaveRequestId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+      await hrmsApi.reviewLeaveRequest(leaveRequestId, {
+        status: nextStatus,
+        reviewComment: '',
+        reviewedBy: null,
       })
       setHrmsMessage(`Leave request ${nextStatus}.`)
       await loadStage3Ops()
     } catch (err) {
-      setHrmsMessage(err.message || 'Failed to update leave request.')
+      const msg = err?.response?.data?.error || err.message || 'Failed to update leave request.'
+      setHrmsMessage(msg)
     } finally {
       setIsUpdatingLeaveStatus(false)
     }
@@ -366,20 +344,11 @@ export default function HRErpPage() {
 
     setIsCreatingPayrollRun(true)
     try {
-      await fetchJson('/api/hrms/payroll-runs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          period_label: payrollPeriodLabel.trim(),
-          period_start: payrollStartDate,
-          period_end: payrollEndDate,
-          pay_date: payrollPayDate,
-          status: 'processed',
-          staff_paid: payrollStaffPaid === '' ? 0 : Number(payrollStaffPaid),
-          gross_total: payrollGross === '' ? 0 : Number(payrollGross),
-          deductions_total: payrollDeductions === '' ? 0 : Number(payrollDeductions),
-          net_total: payrollNet === '' ? 0 : Number(payrollNet),
-        }),
+      await hrmsApi.createPayrollPeriod({
+        label: payrollPeriodLabel.trim(),
+        startDate: payrollStartDate,
+        endDate: payrollEndDate,
+        payDate: payrollPayDate,
       })
 
       setPayrollPeriodLabel('')
@@ -665,15 +634,12 @@ export default function HRErpPage() {
   const handleUpdatePipeline = async (row, nextStatus) => {
     if (!row?.candidateId) return
     try {
-      await fetchJson(`/api/hrms/candidates/${row.candidateId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
-      })
+      await hrmsApi.updateCandidateStage(row.candidateId, { stage: nextStatus })
       setHrmsMessage(`Candidate status updated to ${humanizeCandidateStage(nextStatus)}.`)
       await loadHrmsOps()
     } catch (err) {
-      setHrmsMessage(err.message || 'Failed to update candidate status.')
+      const msg = err?.response?.data?.error || err.message || 'Failed to update candidate status.'
+      setHrmsMessage(msg)
     }
   }
 
@@ -682,6 +648,7 @@ export default function HRErpPage() {
       applied: 'Applied',
       screening: 'Screening',
       interview: 'Interviewing',
+      assessment: 'Assessment',
       offer: 'Offer',
       hired: 'Hired',
       rejected: 'Rejected',
@@ -689,24 +656,35 @@ export default function HRErpPage() {
     return map[status] || 'Open'
   }
 
+  const mapOnboardingStage = (pipelineStage, tasksDone, tasksTotal) => {
+    if (pipelineStage === 'hired' || pipelineStage === 'offer') {
+      if (tasksDone >= tasksTotal && tasksTotal > 0) return '90-day review'
+      if (tasksDone > 0) return 'Day 1 complete'
+      return 'Offer accepted'
+    }
+    if (tasksDone > 0) return 'Pre-joining'
+    return 'Pre-joining'
+  }
+
   const loadHrmsOps = async () => {
     setIsHrmsLoading(true)
     try {
-      const jobsData = await fetchJson('/api/hrms/jobs')
-      const jobs = jobsData.items || []
-      setHrmsJobs(jobs)
-      if (!jobs.length) {
-        setRecruitmentRows(JOB_OPENINGS)
-        setOnboardingRows(ONBOARDING_CASES)
-        setHrmsMessage('No HRMS jobs found yet. Showing starter demo data.')
+      const jobs = await hrmsApi.getJobOpenings().catch(() => [])
+      const list = Array.isArray(jobs) ? jobs : []
+      setHrmsJobs(list)
+      if (!list.length) {
+        setRecruitmentRows([])
+        setOnboardingRows([])
+        setCandidateOptions([])
+        setHrmsMessage('No HRMS jobs found yet. Create a vacancy to start live recruitment and onboarding.')
         return
       }
 
       const jobWithCandidates = await Promise.all(
-        jobs.map(async (job) => {
+        list.map(async (job) => {
           try {
-            const candData = await fetchJson(`/api/hrms/jobs/${job.id}/candidates`)
-            return { job, candidates: candData.items || [] }
+            const cands = await hrmsApi.getCandidates(job.id)
+            return { job, candidates: Array.isArray(cands) ? cands : [] }
           } catch {
             return { job, candidates: [] }
           }
@@ -714,19 +692,25 @@ export default function HRErpPage() {
       )
 
       const nextRecruitmentRows = jobWithCandidates.map(({ job, candidates }) => {
-        const stageSource = candidates.find((c) => c.status && c.status !== 'applied') || candidates[0]
+        const stageSource =
+          candidates.find((c) => c.pipelineStage && c.pipelineStage !== 'applied') || candidates[0]
+        const st = stageSource?.pipelineStage || 'applied'
         return {
           jobId: job.id,
           jobStatus: job.status || 'open',
           candidateId: stageSource?.id || null,
-          stageKey: stageSource?.status || 'applied',
+          stageKey: st,
           ref: `HR-${String(job.id).padStart(4, '0')}`,
           title: job.title,
           dept: job.department || 'HR',
-          grade: job.employment_type || 'Open',
-          closes: job.updated_at ? new Date(job.updated_at).toLocaleDateString() : '—',
+          grade: job.employmentType || 'Open',
+          closes: job.closingDate
+            ? new Date(job.closingDate).toLocaleDateString()
+            : job.createdAt
+              ? new Date(job.createdAt).toLocaleDateString()
+              : '—',
           applicants: candidates.length,
-          stage: humanizeCandidateStage(stageSource?.status),
+          stage: humanizeCandidateStage(st),
         }
       })
 
@@ -740,10 +724,10 @@ export default function HRErpPage() {
       setCandidateOptions(
         flattened.map(({ candidate, job }) => ({
           id: candidate.id,
-          label: `${candidate.full_name} — ${job.title}`,
-          status: candidate.status || 'applied',
+          label: `${candidate.name || [candidate.firstName, candidate.lastName].filter(Boolean).join(' ')} — ${job.title}`,
+          status: candidate.pipelineStage || 'applied',
           notes: candidate.notes || '',
-          score: candidate.score ?? '',
+          score: candidate.rating ?? '',
         }))
       )
 
@@ -759,14 +743,15 @@ export default function HRErpPage() {
 
           const tasksDone = tasks.filter((t) => t.status === 'completed').length
           const tasksTotal = tasks.length || 1
+          const cname = candidate.name || [candidate.firstName, candidate.lastName].filter(Boolean).join(' ')
           return {
             id: `ONB-${candidate.id}`,
             candidateId: candidate.id,
-            name: candidate.full_name,
+            name: cname,
             role: job.title,
             dept: job.department || 'HR',
-            startDate: candidate.updated_at ? new Date(candidate.updated_at).toLocaleDateString() : '—',
-            stage: humanizeCandidateStage(candidate.status),
+            startDate: candidate.createdAt ? new Date(candidate.createdAt).toLocaleDateString() : '—',
+            stage: mapOnboardingStage(candidate.pipelineStage || 'applied', tasksDone, tasksTotal),
             owner: tasks[0]?.owner || 'HR Ops',
             tasksDone,
             tasksTotal,
@@ -786,7 +771,7 @@ export default function HRErpPage() {
       setOnboardingRows(ONBOARDING_CASES)
       setPayrollRows(PAYROLL_RUNS)
       setAttendanceRows(ATTENDANCE_DAILY)
-      setHrmsMessage('HRMS API unavailable. Showing demo data.')
+      setHrmsMessage('HRMS is temporarily unavailable. Showing saved listings.')
       setAnalytics(null)
     } finally {
       setIsHrmsLoading(false)
@@ -857,14 +842,10 @@ export default function HRErpPage() {
 
     setIsCreatingJob(true)
     try {
-      await fetchJson('/api/hrms/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newJobTitle.trim(),
-          department: newJobDept.trim() || undefined,
-          status: 'open',
-        }),
+      await hrmsApi.createJobOpening({
+        title: newJobTitle.trim(),
+        description: newJobDept.trim() ? `Department: ${newJobDept.trim()}` : '',
+        vacancies: 1,
       })
       setNewJobTitle('')
       setNewJobDept('')
@@ -877,20 +858,48 @@ export default function HRErpPage() {
     }
   }
 
+  const handleCreateStarterVacancy = async () => {
+    setIsCreatingStarterJob(true)
+    try {
+      await hrmsApi.createJobOpening({
+        title: `Starter Vacancy — HR Officer (${new Date().toLocaleDateString()})`,
+        description: 'Starter vacancy created from HR operations quick action.',
+        vacancies: 1,
+      })
+      setHrmsMessage('Starter vacancy created. You can now add candidates and onboarding tasks.')
+      await loadHrmsOps()
+    } catch (err) {
+      setHrmsMessage(err?.message || 'Failed to create starter vacancy.')
+    } finally {
+      setIsCreatingStarterJob(false)
+    }
+  }
+
+  const onboardingStageCards = (
+    onboardingRows.reduce((acc, row) => {
+      const key = row.stage || 'Pre-joining'
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+  )
+
   const handleCreateCandidate = async (e) => {
     e.preventDefault()
     if (!candidateJobId || !candidateName.trim()) return
 
     setIsCreatingCandidate(true)
     try {
-      await fetchJson(`/api/hrms/jobs/${candidateJobId}/candidates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: candidateName.trim(),
-          email: candidateEmail.trim() || undefined,
-          status: 'applied',
-        }),
+      const parts = candidateName.trim().split(/\s+/).filter(Boolean)
+      const firstName = parts[0] || 'Candidate'
+      const lastName = parts.slice(1).join(' ') || 'Applicant'
+      const slug = String(candidateJobId) + Date.now().toString(36)
+      const email = candidateEmail.trim() || `${slug}@candidates.naptin.gov.ng`
+      await hrmsApi.addCandidate(candidateJobId, {
+        firstName,
+        lastName,
+        email,
+        phone: null,
+        source: 'portal',
       })
       setCandidateName('')
       setCandidateEmail('')
@@ -943,6 +952,14 @@ export default function HRErpPage() {
             <RefreshCw size={13} />
             {isHrmsLoading ? 'Syncing...' : 'Sync HRMS data'}
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={handleCreateStarterVacancy}
+          className="btn-primary text-xs py-1.5 px-3"
+          disabled={isHrmsLoading || isCreatingStarterJob}
+        >
+          {isCreatingStarterJob ? 'Creating starter vacancy…' : 'Create starter vacancy'}
         </button>
         <p className="text-xs text-slate-400">{hrmsMessage}</p>
       </div>
@@ -1345,11 +1362,17 @@ export default function HRErpPage() {
       {tab === 'onboarding' && (
         <div className="space-y-5">
           <div className="flex flex-wrap gap-2">
-            {ONBOARD_STAGES.map((s) => (
-              <span key={s} className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                {s}
+            {Object.keys(onboardingStageCards).length ? (
+              Object.entries(onboardingStageCards).map(([stage, count]) => (
+                <span key={stage} className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                  {stage} · {count}
+                </span>
+              ))
+            ) : (
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                No onboarding pipeline yet
               </span>
-            ))}
+            )}
           </div>
           <form className="card space-y-3" onSubmit={handleCreateOnboardingTask}>
             <h3 className="text-sm font-bold text-slate-800">Create onboarding task</h3>
@@ -1435,11 +1458,18 @@ export default function HRErpPage() {
                     </td>
                   </tr>
                 ))}
+                {!onboardingRows.length && (
+                  <tr>
+                    <td className="table-td text-slate-400 text-xs" colSpan={7}>
+                      No onboarding rows yet. Create a vacancy and add a candidate to begin.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
           <p className="text-xs text-slate-400">
-            Typical checklist items: contract signed, ICT account, ID card, induction, benefits enrolment — wire to task service in production.
+            Typical checklist items: contract signed, ICT account, ID card, induction, and benefits enrolment.
           </p>
         </div>
       )}

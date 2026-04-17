@@ -4,11 +4,7 @@ import { ChatCallProvider } from '../chat/ChatCallContext'
 import { OwlChatApp } from '../chat/OwlChatApp'
 import { CallUI } from '../chat/CallUI'
 
-/**
- * Full Owl Talk stack from `dev/frontend`: Socket.IO DMs, WebRTC calls (CallUI),
- * groups, meetings, media gallery, profile edit, settings — plus offline prototype
- * using NAPTIN staff mocks when VITE_CHAT_API_URL is unset.
- */
+/** Owl Talk: messaging, calls, and presence inside the portal. */
 export default function ChatPage() {
   return (
     <ChatSocketProvider>

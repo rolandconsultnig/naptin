@@ -1,0 +1,13 @@
+{
+  "appId": "ng.gov.naptin.portal",
+  "appName": "NAPTIN",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}

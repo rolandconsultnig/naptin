@@ -45,6 +45,7 @@ import IntegrationsPage from './pages/IntegrationsPage'
 import SecurityPage from './pages/SecurityPage'
 import HRErpPage from './pages/HRErpPage'
 import EnterpriseHRMSPage from './pages/EnterpriseHRMSPage'
+import RecruitmentPortalPage from './pages/RecruitmentPortalPage'
 import CorporateSuitePage from './pages/CorporateSuitePage'
 import LegalBoardPage from './pages/LegalBoardPage'
 import ICTPage from './pages/ICTPage'
@@ -193,6 +194,7 @@ function AppRoutes() {
             <Route index element={<HumanResourceHomeRedirect />} />
             <Route path="people" element={<HRPage />} />
             <Route path="directory" element={<DirectoryPage />} />
+            <Route path="recruitment" element={<RecruitmentPortalPage />} />
             <Route path="operations" element={<HRErpPage />} />
             <Route path="enterprise" element={<EnterpriseHRMSPage />} />
             <Route path="self-service" element={<SelfServicePage />} />

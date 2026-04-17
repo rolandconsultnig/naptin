@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { NAPTIN_LOGO } from '../assets/images'
 import {
@@ -43,6 +44,7 @@ import {
   Smartphone,
   Plug,
 } from 'lucide-react'
+import { hrmsApi } from '../services/hrmsService'
 
 const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -75,6 +77,31 @@ export default function EnterpriseHRMSPage() {
   const [search, setSearch] = useSearchParams()
   const raw = search.get('section')
   const active = SECTIONS.some((s) => s.id === raw) ? raw : 'dashboard'
+  const [liveHeadcount, setLiveHeadcount] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await hrmsApi.getEmployees({ limit: 500 })
+        const emps = data.employees || []
+        if (cancelled || !emps.length) return
+        const norm = (e) => String(e.employmentStatus || e.employment_status || '').toLowerCase()
+        const activeN = emps.filter((e) => norm(e) === 'active').length
+        const onLeave = emps.filter((e) => norm(e) === 'on_leave').length
+        setLiveHeadcount({
+          total: typeof data.total === 'number' ? data.total : emps.length,
+          active: activeN,
+          onLeave,
+        })
+      } catch {
+        // keep dashboard usable if headcount endpoint fails
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function goTo(id) {
     setSearch({ section: id }, { replace: true })
@@ -116,9 +143,8 @@ export default function EnterpriseHRMSPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-extrabold text-slate-900">Enterprise HRMS</h1>
             <p className="text-sm text-slate-400">
-              Mirrors the standalone <code className="text-xs bg-slate-100 px-1 rounded">Enterprise HRMS</code> module map.
-              Data is prototype mock; set <code className="text-xs bg-slate-100 px-1 rounded">VITE_HRMS_API</code> to point at that
-              Node API when you run it (port 5050 by default).
+              Mirrors the Enterprise HRMS module map. Headcount tiles sync when HRMS is connected; other tiles show reference
+              figures until your data feed is enabled.
             </p>
             <div className="flex flex-wrap gap-2 mt-2">
               <Link to="/app/human-resource/people" className="text-xs font-semibold text-[#006838] hover:underline">
@@ -139,9 +165,9 @@ export default function EnterpriseHRMSPage() {
         {active === 'dashboard' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <StatCard title="Total employees" value={HRMS_DASHBOARD.totalEmployees} accent="text-blue-600" />
-              <StatCard title="Active" value={HRMS_DASHBOARD.activeEmployees} accent="text-emerald-600" />
-              <StatCard title="On leave" value={HRMS_DASHBOARD.onLeave} accent="text-amber-600" />
+              <StatCard title="Total employees" value={liveHeadcount ? liveHeadcount.total : HRMS_DASHBOARD.totalEmployees} accent="text-blue-600" />
+              <StatCard title="Active" value={liveHeadcount ? liveHeadcount.active : HRMS_DASHBOARD.activeEmployees} accent="text-emerald-600" />
+              <StatCard title="On leave" value={liveHeadcount ? liveHeadcount.onLeave : HRMS_DASHBOARD.onLeave} accent="text-amber-600" />
               <StatCard title="New hires (90d)" value={HRMS_DASHBOARD.newHires} accent="text-purple-600" />
             </div>
             <div className="card p-6">
@@ -176,8 +202,8 @@ export default function EnterpriseHRMSPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-600">
-                Directory sample: <strong>{STAFF.length}</strong> records in prototype; enterprise total{' '}
-                <strong>{HRMS_DASHBOARD.totalEmployees}</strong> in dashboard KPIs.
+                Sample directory: <strong>{STAFF.length}</strong> rows · live headcount:{' '}
+                <strong>{liveHeadcount ? liveHeadcount.total : HRMS_DASHBOARD.totalEmployees}</strong>.
               </p>
               <Link to="/app/human-resource/people" className="btn-primary text-xs py-2 px-4">
                 Open People
@@ -352,7 +378,7 @@ export default function EnterpriseHRMSPage() {
               </table>
             </div>
             <div className="card overflow-x-auto">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">RTC / site summary (prototype)</h2>
+              <h2 className="text-sm font-bold text-slate-800 mb-4">RTC / site summary</h2>
               <table className="w-full text-sm">
                 <thead>
                   <tr>

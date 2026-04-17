@@ -22,6 +22,7 @@ import {
   FinanceExpenditureWorkbenchView,
   FinanceFiscalReportingView,
 } from './FinanceWorkbenchViews'
+import { FinanceCashAdvanceView } from './CashAdvanceViews'
 
 const REGISTRY = {
   overview: FinanceOverviewView,
@@ -43,6 +44,7 @@ const REGISTRY = {
   'budget-workbench': FinanceBudgetWorkbenchView,
   'expenditure-workbench': FinanceExpenditureWorkbenchView,
   'fiscal-reporting': FinanceFiscalReportingView,
+  'cash-advances': FinanceCashAdvanceView,
 }
 
 export default function FinanceSectionPage() {

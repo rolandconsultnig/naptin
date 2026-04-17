@@ -114,7 +114,7 @@ export default function AdminOverviewPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-slate-900">Audit log</p>
-                <p className="text-xs text-slate-500">Administrative actions (prototype — wire to SIEM)</p>
+                <p className="text-xs text-slate-500">Administrative actions and sign-in events</p>
               </div>
               <ArrowRight size={18} className="text-slate-300 group-hover:text-[#006838] flex-shrink-0" />
             </Link>
@@ -124,7 +124,8 @@ export default function AdminOverviewPage() {
 
       {!canEdit && (
         <p className="text-xs text-slate-400 mt-6 p-4 rounded-xl bg-slate-50 border border-slate-100">
-          Signed in as <span className="font-mono">{roleKey}</span>. Module registry, access matrix, users, and audit are limited to <strong>director</strong> and <strong>ICT admin</strong> demo accounts.
+          Signed in as <span className="font-mono">{roleKey}</span>. Module registry, access matrix, users, and audit are limited to{' '}
+          <strong>director</strong> and <strong>ICT admin</strong> roles.
         </p>
       )}
     </div>

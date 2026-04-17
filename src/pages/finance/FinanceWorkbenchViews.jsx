@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNotifications } from '../../context/NotificationContext'
+import { financeApi } from '../../services/financeService'
 import { X, CheckCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp, FileText, BarChart2, DollarSign, Lock, RefreshCw, Upload, Download, ShieldCheck, Users } from 'lucide-react'
 
 /* ─── Shared Utilities ─── */
@@ -58,32 +59,99 @@ function fmt(n) {
   return '₦' + n.toLocaleString()
 }
 
-function BudgetConsolidationTab({ toast }) {
-  const [submissions, setSubmissions] = useState(DEPT_SUBMISSIONS_INIT)
-  const [locked, setLocked] = useState(false)
-  const [returnModal, setReturnModal] = useState(null) // dept name
-  const [returnNote, setReturnNote] = useState('')
-  const { addNotification } = useNotifications()
+function fmtVariance(n) {
+  if (n == null || Number.isNaN(Number(n))) return '—'
+  const sign = Number(n) > 0 ? '+' : ''
+  return `${sign}${Number(n).toFixed(0)}%`
+}
 
-  const handleApproveAll = () => {
+function BudgetConsolidationTab({ toast }) {
+  const [submissions, setSubmissions] = useState([])
+  const [locked, setLocked] = useState(false)
+  const [returnModal, setReturnModal] = useState(null)
+  const [returnNote, setReturnNote] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busyAction, setBusyAction] = useState('')
+  const { addNotification } = useNotifications()
+  const fiscalYearLabel = 'FY 2026'
+
+  const loadSubmissions = async () => {
+    setLoading(true)
+    try {
+      const data = await financeApi.getBudgetWorkbenchSubmissions({ fiscalYearLabel })
+      setLocked(!!data.isLocked)
+      setSubmissions((data.items || []).map((item) => ({
+        id: item.id,
+        dept: item.departmentName,
+        submitted: item.submitted,
+        status: item.status,
+        variance: fmtVariance(item.variancePct),
+        amount: item.amount,
+        prevYear: item.prevYear,
+        justification: item.justification,
+      })))
+    } catch (error) {
+      toast.show(error?.response?.data?.error || error.message || 'Failed to load submissions')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadSubmissions()
+  }, [])
+
+  const handleApproveAll = async () => {
     if (locked) return
-    setSubmissions(s => s.map(d => d.status === 'submitted' ? { ...d, status: 'approved' } : d))
+    setBusyAction('approve-all')
+    try {
+      await financeApi.approveAllBudgetSubmissions({ fiscalYearLabel, actor: 'finance.workbench' })
+      await loadSubmissions()
+    } finally {
+      setBusyAction('')
+    }
     toast.show('All submitted budgets approved.')
     addNotification({ title: 'Budget Approved — All Depts', sub: 'All submitted department budgets have been approved for FY 2026.', type: 'success', link: '/app/finance', module: 'Finance' })
   }
-  const handleLock = () => {
-    const allDone = submissions.every(d => ['approved', 'pending'].includes(d.status) || d.status === 'approved')
+  const handleLock = async () => {
+    if (locked) return
     const anyPending = submissions.some(d => d.status === 'pending')
     const anyFlagged = submissions.some(d => d.status === 'flagged' || d.status === 'submitted')
     if (anyFlagged) { toast.show('Cannot lock — flagged or unreviewed submissions remain.'); return }
-    setLocked(true)
+    setBusyAction('lock')
+    try {
+      await financeApi.lockBudgetSubmissions({ fiscalYearLabel, actor: 'finance.workbench' })
+      await loadSubmissions()
+    } finally {
+      setBusyAction('')
+    }
     toast.show(anyPending ? 'Budget locked — HR submission pending (will carry forward at zero).' : 'Budget locked for FY 2026.')
   }
-  const openReturn = (dept) => { setReturnModal(dept); setReturnNote('') }
-  const handleReturn = () => {
-    setSubmissions(s => s.map(d => d.dept === returnModal ? { ...d, status: 'returned', justification: null } : d))
-    toast.show(`Budget returned to ${returnModal} dept with comments.`)
+  const openReturn = (submission) => { setReturnModal(submission); setReturnNote('') }
+  const handleReturn = async () => {
+    if (!returnModal) return
+    setBusyAction(`return-${returnModal.id}`)
+    try {
+      await financeApi.returnBudgetSubmission(returnModal.id, {
+        note: returnNote,
+        actor: 'finance.workbench',
+      })
+      await loadSubmissions()
+    } finally {
+      setBusyAction('')
+    }
+    toast.show(`Budget returned to ${returnModal.dept} dept with comments.`)
     setReturnModal(null)
+  }
+  const handleApproveOne = async (submission) => {
+    setBusyAction(`approve-${submission.id}`)
+    try {
+      await financeApi.approveBudgetSubmission(submission.id, { actor: 'finance.workbench' })
+      await loadSubmissions()
+    } finally {
+      setBusyAction('')
+    }
+    toast.show(`${submission.dept} budget approved.`)
   }
   const handleCircular = () => toast.show('Budget Circular 2026/001 published and sent to all Heads of Department.')
 
@@ -95,24 +163,25 @@ function BudgetConsolidationTab({ toast }) {
   return (
     <div className="space-y-4">
       {returnModal && (
-        <Modal title={`Return Submission — ${returnModal}`} onClose={() => setReturnModal(null)}>
+        <Modal title={`Return Submission — ${returnModal.dept}`} onClose={() => setReturnModal(null)}>
           <label className="text-[10px] font-semibold text-slate-500 uppercase">Comments / Justification Required</label>
           <textarea className="np-input w-full text-sm h-24 mt-0.5" value={returnNote} onChange={e => setReturnNote(e.target.value)} placeholder="Explain what needs to be revised..." />
           <div className="flex justify-end gap-2">
             <button className="btn-secondary text-sm" onClick={() => setReturnModal(null)}>Cancel</button>
-            <button className="btn-primary text-sm" onClick={handleReturn} disabled={!returnNote.trim()}>Return Submission</button>
+            <button className="btn-primary text-sm" onClick={handleReturn} disabled={!returnNote.trim() || busyAction.startsWith('return-')}>Return Submission</button>
           </div>
         </Modal>
       )}
       <div className="flex flex-wrap gap-2">
-        <button className="btn-secondary text-sm" onClick={handleCircular} disabled={locked}><FileText size={14} /> Publish Budget Circular</button>
-        <button className="btn-primary text-sm" onClick={handleApproveAll} disabled={locked}>
+        <button className="btn-secondary text-sm" onClick={handleCircular} disabled={locked || loading}><FileText size={14} /> Publish Budget Circular</button>
+        <button className="btn-primary text-sm" onClick={handleApproveAll} disabled={locked || loading || busyAction === 'approve-all'}>
           <CheckCircle size={14} /> Approve All Submitted
         </button>
-        <button className={`text-sm px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${locked ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`} onClick={handleLock} disabled={locked}>
+        <button className={`text-sm px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5 ${locked ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`} onClick={handleLock} disabled={locked || loading || busyAction === 'lock'}>
           <Lock size={14} /> {locked ? 'Budget Locked' : 'Lock Budget'}
         </button>
       </div>
+      {loading && <div className="text-xs text-slate-500">Loading submissions…</div>}
       {locked && <div className="bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl px-4 py-3">Budget FY 2026 is locked. No further modifications are permitted.</div>}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -129,14 +198,14 @@ function BudgetConsolidationTab({ toast }) {
                 <td className="py-2.5">
                   {!locked && d.status === 'flagged' && (
                     <div className="flex gap-1">
-                      <button className="text-[10px] px-2 py-1 bg-green-100 text-green-700 rounded-md font-semibold hover:bg-green-200" onClick={() => setSubmissions(s => s.map(x => x.dept === d.dept ? { ...x, status: 'approved' } : x))}>Approve</button>
-                      <button className="text-[10px] px-2 py-1 bg-amber-100 text-amber-700 rounded-md font-semibold hover:bg-amber-200" onClick={() => openReturn(d.dept)}>Return</button>
+                      <button className="text-[10px] px-2 py-1 bg-green-100 text-green-700 rounded-md font-semibold hover:bg-green-200" disabled={busyAction === `approve-${d.id}`} onClick={() => handleApproveOne(d)}>Approve</button>
+                      <button className="text-[10px] px-2 py-1 bg-amber-100 text-amber-700 rounded-md font-semibold hover:bg-amber-200" onClick={() => openReturn(d)}>Return</button>
                     </div>
                   )}
                   {!locked && d.status === 'submitted' && (
                     <div className="flex gap-1">
-                      <button className="text-[10px] px-2 py-1 bg-green-100 text-green-700 rounded-md font-semibold hover:bg-green-200" onClick={() => setSubmissions(s => s.map(x => x.dept === d.dept ? { ...x, status: 'approved' } : x))}>Approve</button>
-                      <button className="text-[10px] px-2 py-1 bg-red-100 text-red-700 rounded-md font-semibold hover:bg-red-200" onClick={() => openReturn(d.dept)}>Return</button>
+                      <button className="text-[10px] px-2 py-1 bg-green-100 text-green-700 rounded-md font-semibold hover:bg-green-200" disabled={busyAction === `approve-${d.id}`} onClick={() => handleApproveOne(d)}>Approve</button>
+                      <button className="text-[10px] px-2 py-1 bg-red-100 text-red-700 rounded-md font-semibold hover:bg-red-200" onClick={() => openReturn(d)}>Return</button>
                     </div>
                   )}
                   {d.justification && <p className="text-[10px] text-slate-400 mt-0.5 max-w-[160px] truncate italic">{d.justification}</p>}
@@ -169,26 +238,86 @@ function BudgetConsolidationTab({ toast }) {
 }
 
 function VirementTab({ toast }) {
-  const [transfers, setTransfers] = useState(TRANSFERS_INIT)
+  const [transfers, setTransfers] = useState([])
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ fromLine: '', toLine: '', amount: '', reason: '' })
+  const [loading, setLoading] = useState(true)
+  const [busyAction, setBusyAction] = useState('')
   const { addNotification } = useNotifications()
+  const fiscalYearLabel = 'FY 2026'
 
-  const handleApprove = (id) => {
-    setTransfers(s => s.map(t => t.id === id ? { ...t, status: 'approved' } : t))
-    toast.show(`Virement ${id} approved.`)
-    addNotification({ title: `Virement Approved: ${id}`, sub: `Budget virement ${id} has been approved.`, type: 'success', link: '/app/finance', module: 'Finance' })
+  const loadVirements = async () => {
+    setLoading(true)
+    try {
+      const data = await financeApi.getBudgetVirements({ fiscalYearLabel })
+      setTransfers((data.items || []).map((item) => ({
+        id: item.id,
+        ref: item.virementRef,
+        fromLine: item.fromLine,
+        toLine: item.toLine,
+        amount: item.amount,
+        reason: item.reason,
+        status: item.status,
+        requestedBy: item.requestedBy,
+        approvalLevel: item.approvalLevel,
+      })))
+    } catch (error) {
+      toast.show(error?.response?.data?.error || error.message || 'Failed to load virements')
+    } finally {
+      setLoading(false)
+    }
   }
-  const handleReject = (id) => {
-    setTransfers(s => s.map(t => t.id === id ? { ...t, status: 'rejected' } : t))
-    toast.show(`Virement ${id} rejected.`)
-    addNotification({ title: `Virement Rejected: ${id}`, sub: `Budget virement ${id} was rejected and returned.`, type: 'warning', link: '/app/finance', module: 'Finance' })
+
+  useEffect(() => {
+    loadVirements()
+  }, [])
+
+  const handleApprove = async (transfer) => {
+    setBusyAction(`approve-${transfer.id}`)
+    try {
+      await financeApi.approveBudgetVirement(transfer.id, { approver: 'finance.workbench' })
+      await loadVirements()
+    } finally {
+      setBusyAction('')
+    }
+    toast.show(`Virement ${transfer.ref} approved.`)
+    addNotification({ title: `Virement Approved: ${transfer.ref}`, sub: `Budget virement ${transfer.ref} has been approved.`, type: 'success', link: '/app/finance', module: 'Finance' })
   }
-  const handleSubmit = () => {
+  const handleReject = async (transfer) => {
+    const note = window.prompt('Enter rejection note:', 'Insufficient justification')
+    if (!note || !note.trim()) return
+    setBusyAction(`reject-${transfer.id}`)
+    try {
+      await financeApi.rejectBudgetVirement(transfer.id, {
+        approver: 'finance.workbench',
+        note: note.trim(),
+      })
+      await loadVirements()
+    } finally {
+      setBusyAction('')
+    }
+    toast.show(`Virement ${transfer.ref} rejected.`)
+    addNotification({ title: `Virement Rejected: ${transfer.ref}`, sub: `Budget virement ${transfer.ref} was rejected and returned.`, type: 'warning', link: '/app/finance', module: 'Finance' })
+  }
+  const handleSubmit = async () => {
     if (!form.fromLine || !form.toLine || !form.amount || !form.reason) { toast.show('All fields are required.'); return }
-    const id = `VIR-2026-${String(transfers.length + 10).padStart(3, '0')}`
-    setTransfers(s => [{ id, fromLine: form.fromLine, toLine: form.toLine, amount: parseFloat(form.amount), reason: form.reason, status: 'pending', requestedBy: 'Current User', approvalLevel: parseFloat(form.amount) >= 5000000 ? 'DG + Finance Director' : parseFloat(form.amount) >= 1000000 ? 'Finance Director' : 'Finance Officer' }, ...s])
-    toast.show(`Virement ${id} submitted for approval.`)
+    setBusyAction('create')
+    let createdRef = 'new'
+    try {
+      const created = await financeApi.createBudgetVirement({
+        fiscalYearLabel,
+        fromLine: form.fromLine,
+        toLine: form.toLine,
+        amount: Number(form.amount),
+        reason: form.reason,
+        requestedBy: 'Current User',
+      })
+      createdRef = created.virementRef || createdRef
+      await loadVirements()
+    } finally {
+      setBusyAction('')
+    }
+    toast.show(`Virement ${createdRef} submitted for approval.`)
     setShowModal(false); setForm({ fromLine: '', toLine: '', amount: '', reason: '' })
   }
 
@@ -215,7 +344,7 @@ function VirementTab({ toast }) {
           {form.amount && <p className="text-xs text-slate-500">Approval level: <span className="font-semibold">{parseFloat(form.amount) >= 5000000 ? 'DG + Finance Director' : parseFloat(form.amount) >= 1000000 ? 'Finance Director' : 'Finance Officer'}</span></p>}
           <div className="flex justify-end gap-2">
             <button className="btn-secondary text-sm" onClick={() => setShowModal(false)}>Cancel</button>
-            <button className="btn-primary text-sm" onClick={handleSubmit}>Submit Request</button>
+            <button className="btn-primary text-sm" disabled={busyAction === 'create'} onClick={handleSubmit}>Submit Request</button>
           </div>
         </Modal>
       )}
@@ -223,13 +352,14 @@ function VirementTab({ toast }) {
         <p className="text-xs text-slate-500">Tiered approval: &lt;₦1M → Finance Officer · ₦1–5M → Finance Director · &gt;₦5M → DG + Finance Director</p>
         <button className="btn-primary text-sm" onClick={() => setShowModal(true)}>+ New Virement</button>
       </div>
+      {loading && <div className="text-xs text-slate-500">Loading virements…</div>}
       <div className="space-y-3">
         {transfers.map((t, i) => (
           <div key={i} className="card">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold text-slate-800">{t.id}</span>
+                  <span className="text-xs font-bold text-slate-800">{t.ref}</span>
                   {statusBadge(t.status)}
                 </div>
                 <p className="text-xs text-slate-600"><span className="font-semibold">From:</span> {t.fromLine} → <span className="font-semibold">To:</span> {t.toLine}</p>
@@ -240,8 +370,8 @@ function VirementTab({ toast }) {
                 <p className="text-sm font-bold text-slate-800">{fmt(t.amount)}</p>
                 {t.status === 'pending' && (
                   <div className="flex gap-1 mt-2">
-                    <button className="text-[10px] px-2 py-1 bg-green-100 text-green-700 rounded-md font-semibold hover:bg-green-200" onClick={() => handleApprove(t.id)}>Approve</button>
-                    <button className="text-[10px] px-2 py-1 bg-red-100 text-red-700 rounded-md font-semibold hover:bg-red-200" onClick={() => handleReject(t.id)}>Reject</button>
+                    <button className="text-[10px] px-2 py-1 bg-green-100 text-green-700 rounded-md font-semibold hover:bg-green-200" disabled={busyAction === `approve-${t.id}`} onClick={() => handleApprove(t)}>Approve</button>
+                    <button className="text-[10px] px-2 py-1 bg-red-100 text-red-700 rounded-md font-semibold hover:bg-red-200" disabled={busyAction === `reject-${t.id}`} onClick={() => handleReject(t)}>Reject</button>
                   </div>
                 )}
               </div>

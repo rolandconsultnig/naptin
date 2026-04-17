@@ -13,12 +13,44 @@ const ccLog = (...args) => {
 
 const CallContext = createContext()
 
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
+function parseCsvEnv(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
 }
+
+function createIceServers() {
+  const stunUrls = parseCsvEnv(import.meta.env.VITE_CHAT_STUN_URLS)
+  const turnUrls = parseCsvEnv(import.meta.env.VITE_CHAT_TURN_URLS)
+  const turnUsername = String(import.meta.env.VITE_CHAT_TURN_USERNAME || '').trim()
+  const turnCredential = String(import.meta.env.VITE_CHAT_TURN_CREDENTIAL || '').trim()
+
+  const effectiveStunUrls =
+    stunUrls.length > 0
+      ? stunUrls
+      : ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']
+
+  const iceServers = effectiveStunUrls.map((url) => ({ urls: url }))
+
+  if (turnUrls.length > 0) {
+    if (!turnUsername || !turnCredential) {
+      if (CHAT_DEBUG_ENABLED) {
+        console.warn('[chat-call] TURN URLs provided but username/credential missing; TURN skipped.')
+      }
+    } else {
+      iceServers.push({
+        urls: turnUrls.length === 1 ? turnUrls[0] : turnUrls,
+        username: turnUsername,
+        credential: turnCredential,
+      })
+    }
+  }
+
+  return { iceServers }
+}
+
+const ICE_SERVERS = createIceServers()
 
 export function ChatCallProvider({ children }) {
   const { socket, connected } = useChatSocket()
@@ -66,6 +98,108 @@ export function ChatCallProvider({ children }) {
   const screenShareRef = useRef(null)
   const recordingRef = useRef(null)
   const mediaRecorderRef = useRef(null)
+  /** Avoid stale `callState` inside Socket.IO handlers (esp. call_ended / call_rejected). */
+  const socketRef = useRef(null)
+  const localStreamRef = useRef(null)
+  const remoteStreamRef = useRef(null)
+  const activeCallIdRef = useRef(null)
+  const isRecordingRef = useRef(false)
+  const endCallRef = useRef(() => {})
+
+  useEffect(() => {
+    socketRef.current = socket
+  }, [socket])
+
+  useEffect(() => {
+    localStreamRef.current = callState.localStream
+    remoteStreamRef.current = callState.remoteStream
+    isRecordingRef.current = callState.isRecording
+  }, [callState.localStream, callState.remoteStream, callState.isRecording])
+
+  const endCall = useCallback(() => {
+    ccLog('🔚 Ending call - Stopping all media tracks')
+
+    const currentLocalStream = localStreamRef.current
+    const currentRemoteStream = remoteStreamRef.current
+    const currentIsRecording = isRecordingRef.current
+    const callIdForEmit = activeCallIdRef.current
+    const sock = socketRef.current
+
+    if (callDurationTimerRef.current) {
+      clearInterval(callDurationTimerRef.current)
+      callDurationTimerRef.current = null
+    }
+
+    if (currentIsRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+        mediaRecorderRef.current = null
+      }
+      if (recordingRef.current?.timer) {
+        clearInterval(recordingRef.current.timer)
+        recordingRef.current.timer = null
+      }
+    }
+
+    if (screenShareRef.current) {
+      screenShareRef.current.getTracks().forEach((track) => track.stop())
+      screenShareRef.current = null
+    }
+
+    if (currentLocalStream) {
+      currentLocalStream.getTracks().forEach((track) => track.stop())
+    }
+    if (currentRemoteStream) {
+      currentRemoteStream.getTracks().forEach((track) => track.stop())
+    }
+
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close()
+      peerConnectionRef.current = null
+    }
+
+    if (sock && otherUserIdRef.current) {
+      sock.emit('call_end', {
+        call_id: callIdForEmit ?? null,
+        target_id: otherUserIdRef.current,
+      })
+    }
+
+    activeCallIdRef.current = null
+
+    setCallState({
+      isCalling: false,
+      isInCall: false,
+      incomingCall: null,
+      callType: null,
+      localStream: null,
+      remoteStream: null,
+      isCaller: false,
+      isMuted: false,
+      isVideoEnabled: true,
+      callQuality: 'good',
+      callDuration: 0,
+      isScreenSharing: false,
+      screenShareStream: null,
+      presentationMode: false,
+      isPaused: false,
+      currentSlide: 0,
+      totalSlides: 0,
+      slides: [],
+      slideImages: [],
+      annotationTool: 'pointer',
+      isDrawing: false,
+      annotations: [],
+      isRecording: false,
+      recordingDuration: 0,
+    })
+
+    otherUserIdRef.current = null
+  }, [])
+
+  useEffect(() => {
+    endCallRef.current = endCall
+  }, [endCall])
 
   useEffect(() => {
     if (!socket || !connected) return
@@ -73,45 +207,48 @@ export function ChatCallProvider({ children }) {
     // Listen for incoming calls
     socket.on('incoming_call', (data) => {
       ccLog('📞 Incoming call:', data)
-      
+      if (data?.call_id != null) activeCallIdRef.current = data.call_id
+
       // Play notification sound based on call type
       const notificationType = data.call_type === 'video' ? 'video' : 'call'
       playNotificationSound(notificationType)
-      
-      // Also vibrate
+
       if ('vibrate' in navigator) {
         navigator.vibrate([200, 100, 200, 100, 200])
       }
-      
-      setCallState(prev => ({
+
+      setCallState((prev) => ({
         ...prev,
         incomingCall: data,
-        callType: data.call_type
+        callType: data.call_type,
       }))
+    })
+
+    socket.on('call_initiated', (data) => {
+      ccLog('📞 Call initiated (caller)', data)
+      if (data?.call_id != null) activeCallIdRef.current = data.call_id
     })
 
     // Listen for call acceptance
     socket.on('call_accepted', (data) => {
       ccLog('✅ Call accepted by receiver, caller can now start WebRTC')
-      // When call is accepted, the caller needs to create peer connection and offer
-      // This is handled in the useEffect that watches callState.isInCall
-      setCallState(prev => ({
+      setCallState((prev) => ({
         ...prev,
         isInCall: true,
-        isCalling: false
+        isCalling: false,
       }))
     })
 
     // Listen for call rejection
     socket.on('call_rejected', (data) => {
       ccLog('❌ Call rejected')
-      endCall()
+      endCallRef.current()
     })
 
     // Listen for call end
     socket.on('call_ended', (data) => {
       ccLog('🔚 Call ended')
-      endCall()
+      endCallRef.current()
     })
 
     // Define handlers inside useEffect to avoid stale closures
@@ -179,7 +316,7 @@ export function ChatCallProvider({ children }) {
           ccLog('✅ Answer created and local description set')
 
           ccLog('📤 Sending answer to caller...')
-          socket.emit('answer', {
+          socketRef.current?.emit('answer', {
             target_id: otherUserIdRef.current,
             sdp: answer.sdp,
             type: answer.type
@@ -232,6 +369,7 @@ export function ChatCallProvider({ children }) {
 
     return () => {
       socket.off('incoming_call')
+      socket.off('call_initiated')
       socket.off('call_accepted')
       socket.off('call_rejected')
       socket.off('call_ended')
@@ -289,7 +427,7 @@ export function ChatCallProvider({ children }) {
           ccLog('✅ Local description set')
 
           ccLog('📤 Sending offer to receiver...')
-          socket.emit('offer', {
+          socketRef.current?.emit('offer', {
             target_id: otherUserIdRef.current,
             sdp: offer.sdp,
             type: offer.type
@@ -320,9 +458,9 @@ export function ChatCallProvider({ children }) {
 
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
-      if (event.candidate && socket && userId) {
+      if (event.candidate && userId) {
         ccLog('🧊 Sending ICE candidate')
-        socket.emit('ice_candidate', {
+        socketRef.current?.emit('ice_candidate', {
           target_id: userId,
           candidate: event.candidate.candidate,
           sdpMLineIndex: event.candidate.sdpMLineIndex,
@@ -334,6 +472,10 @@ export function ChatCallProvider({ children }) {
     // Handle connection state
     pc.onconnectionstatechange = () => {
       ccLog('🔌 Connection state:', pc.connectionState)
+      if (pc.connectionState === 'failed') {
+        toast.error('Call dropped (network). You can try again.')
+        endCallRef.current?.()
+      }
     }
 
     return pc
@@ -341,7 +483,7 @@ export function ChatCallProvider({ children }) {
 
   const startCall = async (receiverId, callType = 'audio') => {
     if (!socket || !connected) {
-      toast.error('Calls need the chat server on port 5117 and an active Socket.IO connection.')
+      toast.error('Calls need Owl Talk on port 4003 and an active Socket.IO connection.')
       return
     }
 
@@ -472,6 +614,7 @@ export function ChatCallProvider({ children }) {
     }
     
     socket.emit('call_reject', { call_id: callState.incomingCall.call_id })
+    activeCallIdRef.current = null
     setCallState(prev => ({
       ...prev,
       incomingCall: null,
@@ -482,118 +625,6 @@ export function ChatCallProvider({ children }) {
     }))
     
     ccLog('✅ Call rejected - Media tracks stopped')
-  }
-
-  const endCall = () => {
-    ccLog('🔚 Ending call - Stopping all media tracks IMMEDIATELY')
-    
-    // Store current state before cleanup
-    const currentLocalStream = callState.localStream
-    const currentRemoteStream = callState.remoteStream
-    const currentIsRecording = callState.isRecording
-    const currentCallId = callState.incomingCall?.call_id
-    
-    // STEP 1: Stop call duration timer
-    if (callDurationTimerRef.current) {
-      ccLog('🛑 Stopping call duration timer')
-      clearInterval(callDurationTimerRef.current)
-      callDurationTimerRef.current = null
-    }
-    
-    // STEP 2: IMMEDIATELY stop recording first
-    if (currentIsRecording) {
-      ccLog('🛑 Stopping recording')
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop()
-        mediaRecorderRef.current = null
-      }
-      if (recordingRef.current?.timer) {
-        clearInterval(recordingRef.current.timer)
-        recordingRef.current.timer = null
-      }
-    }
-
-    // STEP 3: IMMEDIATELY stop screen sharing
-    if (screenShareRef.current) {
-      ccLog('🛑 Stopping screen sharing')
-      screenShareRef.current.getTracks().forEach(track => {
-        track.stop()
-        ccLog('✅ Stopped screen track:', track.kind, track.label)
-      })
-      screenShareRef.current = null
-    }
-
-    // STEP 4: IMMEDIATELY stop local stream (camera/microphone) - THIS IS CRITICAL
-    if (currentLocalStream) {
-      ccLog('🛑 Stopping local stream (camera/microphone)')
-      currentLocalStream.getTracks().forEach(track => {
-        ccLog('🛑 Stopping track:', track.kind, track.label, track.readyState)
-        track.stop()  // Stop the track synchronously
-        ccLog('✅ Stopped local track:', track.kind, track.label, 'New state:', track.readyState)
-      })
-    }
-
-    // STEP 5: IMMEDIATELY stop remote stream
-    if (currentRemoteStream) {
-      ccLog('🛑 Stopping remote stream')
-      currentRemoteStream.getTracks().forEach(track => {
-        track.stop()
-        ccLog('✅ Stopped remote track:', track.kind)
-      })
-    }
-
-    // STEP 6: Close peer connection immediately
-    if (peerConnectionRef.current) {
-      ccLog('🛑 Closing peer connection')
-      peerConnectionRef.current.close()
-      peerConnectionRef.current = null
-    }
-
-    // STEP 7: Notify backend
-    if (socket && otherUserIdRef.current) {
-      const callId = callState.incomingCall?.call_id || currentCallId
-      ccLog('📤 Emitting call_end to backend', { call_id: callId, other_user: otherUserIdRef.current })
-      socket.emit('call_end', { 
-        call_id: callId || null,
-        target_id: otherUserIdRef.current
-      })
-    }
-
-    // STEP 8: Reset state immediately (after stopping all tracks)
-    setCallState({
-      isCalling: false,
-      isInCall: false,
-      incomingCall: null,
-      callType: null,
-      localStream: null,
-      remoteStream: null,
-      isCaller: false,
-      isMuted: false,
-      isVideoEnabled: true,
-      callQuality: 'good',
-      callDuration: 0,
-      isScreenSharing: false,
-      screenShareStream: null,
-      presentationMode: false,
-      isPaused: false,
-      // Reset presentation features
-      currentSlide: 0,
-      totalSlides: 0,
-      slides: [],
-      slideImages: [],
-      // Reset annotation features
-      annotationTool: 'pointer',
-      isDrawing: false,
-      annotations: [],
-      // Reset recording features
-      isRecording: false,
-      recordingDuration: 0
-    })
-
-    otherUserIdRef.current = null
-    
-    ccLog('✅ Call ended - Camera and microphone IMMEDIATELY released')
-    ccLog('✅ All media tracks stopped and resources cleaned up')
   }
 
   const toggleMute = () => {

@@ -119,7 +119,8 @@ export default function AdminModulesPage() {
     <div className="animate-fade-up max-w-5xl">
       <h1 className="text-xl font-extrabold text-slate-900">Module registry</h1>
       <p className="text-sm text-slate-500 mt-1 mb-6">
-        Disabled modules are hidden from the staff sidebar and return “access denied” if opened by URL. Controls are scoped to the selected tenant in this prototype.
+        Disabled modules are hidden from the staff sidebar and return “access denied” if opened by URL. Controls apply to the
+        selected organisation.
       </p>
 
       {error && (

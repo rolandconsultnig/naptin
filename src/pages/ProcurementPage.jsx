@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { NAPTIN_LOGO } from '../assets/images'
 import {
   ShoppingCart, Package, FileText, ClipboardList, Star,
@@ -9,6 +9,9 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
+import useFetch from '../hooks/useFetch'
+import useMutation from '../hooks/useMutation'
+import { procurementApi } from '../services/procurementService'
 
 // ── Role Matrix ────────────────────────────────────────────────
 const PROC_ROLE_MATRIX = {
@@ -224,6 +227,65 @@ function useToast() {
   return [msg, () => setMsg(null), flash]
 }
 
+function mapApiTender(t) {
+  const ev = Number(t.estimatedValue) || 0
+  const st = String(t.status || '').toLowerCase()
+  const uiStatus = st === 'published' ? 'open' : st || 'open'
+  return {
+    _apiId: t.id,
+    id: t.tenderRef || `TND-${t.id}`,
+    title: t.title,
+    dept: t.category || 'General',
+    budget: ev ? `₦${ev.toLocaleString('en-NG')}` : '—',
+    published: t.publishDate
+      ? new Date(t.publishDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '—',
+    deadline: t.closingDate
+      ? new Date(t.closingDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '—',
+    preBidDate: null,
+    status: uiStatus,
+    type: 'ITB',
+    techWeight: 70,
+    priceWeight: 30,
+    evalPhase: st === 'evaluation' ? 'financial' : 'awaiting-open',
+    awardeeName: st === 'awarded' ? 'See procurement records' : null,
+    bids: [],
+    qaThread: [],
+  }
+}
+
+function mapApiPurchaseOrder(po) {
+  const desc = (po.items || []).map((i) => i.description).filter(Boolean).join(' · ') || 'Purchase order'
+  const st = String(po.status || '').toLowerCase()
+  const _apiItems = (po.items || []).map((i) => ({
+    id: i.id,
+    quantity: Number(i.quantity) || 0,
+    receivedQty: Number(i.receivedQty) || 0,
+  }))
+  return {
+    _apiId: po.id,
+    _apiItems,
+    ref: po.poNumber,
+    desc,
+    vendor: po.vendorName,
+    amount: `₦${Number(po.totalAmount || 0).toLocaleString('en-NG')}`,
+    amountRaw: Number(po.totalAmount || 0),
+    dept: '—',
+    planRef: po.prNumber || '—',
+    date: po.orderDate ? new Date(po.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
+    status: st === 'draft' ? 'pending' : st === 'approved' ? 'approved' : st,
+    approvals: [
+      { role: 'Dept Head', name: '—', action: st !== 'draft' ? 'approved' : 'pending', date: '' },
+      { role: 'Procurement', name: '—', action: st === 'approved' || st === 'received' ? 'approved' : 'pending', date: '' },
+    ],
+    vendorAccepted: ['approved', 'received'].includes(st),
+    goodsReceived: st === 'received',
+    invoiceSubmitted: st === 'received',
+    matchStatus: st === 'received' ? 'matched' : null,
+  }
+}
+
 // ── Modal ──────────────────────────────────────────────────────
 function Modal({ title, onClose, children }) {
   return (
@@ -400,33 +462,49 @@ function APPTab() {
 // ════════════════════════════════════════════════════════════════
 function VendorTab() {
   const [expanded, setExpanded] = useState(null)
-  const [vendors, setVendors] = useState(VENDORS_INIT)
   const [toastMsg, clearToast, flash] = useToast()
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ name:'', category:'', tier:'Tier 2' })
 
-  function approveVendor(id) {
-    setVendors(prev => prev.map(v => v.id === id ? { ...v, status:'active', score:0, contracts:0 } : v))
-    flash('Vendor approved & categorized — access to bid portal granted')
-  }
-  function escalateSuspend(id) {
-    setVendors(prev => prev.map(v => v.id === id ? { ...v, status:'suspended' } : v))
-    flash('Vendor escalated to suspended — bidding access revoked + blacklist notice sent')
-  }
-  function requestDocUpdate(id) {
-    flash(`Document update request sent to ${vendors.find(v=>v.id===id)?.name} — 14-day deadline set`)
-  }
+  const { data: rawVendors = [], refetch: refetchVendors } = useFetch(() => procurementApi.getVendors())
+
+  // Map API vendor → UI shape used in the render below
+  const vendors = rawVendors.map(v => ({
+    _id:    v.id,
+    id:     v.vendorCode,
+    name:   v.name,
+    category: v.registrationType || 'General',
+    tier:   'Tier 2',
+    score:  v.performanceRating || 0,
+    status: v.status || 'active',
+    contracts: v.poCount || 0,
+    value:  '—',
+    taxExp: '—',
+    cacDate: '—',
+    lastReq: '—',
+  }))
+
+  const { run: doRegister, loading: registering } = useMutation(
+    payload => procurementApi.createVendor(payload),
+    {
+      successMsg: 'Vendor registered — pending vetting',
+      onSuccess: () => { setShowModal(false); setForm({ name:'', category:'', tier:'Tier 2' }); refetchVendors() },
+    }
+  )
+
+  const { run: doSuspend } = useMutation(
+    (id) => procurementApi.updateVendor(id, { status: 'suspended' }),
+    { successMsg: 'Vendor suspended', onSuccess: () => refetchVendors() }
+  )
+
+  const { run: doActivate } = useMutation(
+    (id) => procurementApi.updateVendor(id, { status: 'active' }),
+    { successMsg: 'Vendor approved & categorized', onSuccess: () => refetchVendors() }
+  )
+
   function registerVendor() {
     if (!form.name) return
-    const newV = {
-      id:`VND${String(vendors.length+1).padStart(3,'0')}`, name:form.name, category:form.category||'General',
-      tier:form.tier, score:0, status:'pending', contracts:0, value:'—',
-      taxExp:'pending', cacDate:'pending', lastReq:'—',
-    }
-    setVendors(prev => [...prev, newV])
-    setForm({ name:'', category:'', tier:'Tier 2' })
-    setShowModal(false)
-    flash('Vendor registered — pending vetting and document verification')
+    doRegister({ name: form.name, registrationType: form.category || 'General' })
   }
 
   return (
@@ -458,8 +536,8 @@ function VendorTab() {
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setShowModal(false)} className="text-xs text-slate-500 border border-slate-200 px-4 py-2 rounded-xl hover:bg-slate-50">Cancel</button>
-            <button onClick={registerVendor} disabled={!form.name}
-              className="text-xs font-bold bg-[#006838] text-white px-4 py-2 rounded-xl hover:bg-[#005530] disabled:opacity-40">Register Vendor</button>
+            <button onClick={registerVendor} disabled={!form.name || registering}
+              className="text-xs font-bold bg-[#006838] text-white px-4 py-2 rounded-xl hover:bg-[#005530] disabled:opacity-40">{registering ? 'Saving…' : 'Register Vendor'}</button>
           </div>
         </Modal>
       )}
@@ -522,9 +600,9 @@ function VendorTab() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {v.status === 'pending'    && <button onClick={() => approveVendor(v.id)} className="text-xs font-bold text-[#006838] border border-green-200 px-3 py-1 rounded-xl hover:bg-green-50 flex items-center gap-1 transition-colors"><CheckCircle2 size={11} />Approve & Categorize</button>}
-              {v.status === 'active'     && <button onClick={() => requestDocUpdate(v.id)} className="text-xs text-blue-700 border border-blue-200 px-3 py-1 rounded-xl hover:bg-blue-50 flex items-center gap-1 font-semibold transition-colors"><RefreshCw size={11} />Request Doc Update</button>}
-              {v.status === 'show-cause' && <button onClick={() => escalateSuspend(v.id)} className="text-xs font-bold text-red-700 border border-red-200 px-3 py-1 rounded-xl hover:bg-red-50 flex items-center gap-1 transition-colors"><AlertTriangle size={11} />Escalate to Suspension</button>}
+              {v.status === 'pending'    && <button onClick={() => doActivate(v._id)} className="text-xs font-bold text-[#006838] border border-green-200 px-3 py-1 rounded-xl hover:bg-green-50 flex items-center gap-1 transition-colors"><CheckCircle2 size={11} />Approve &amp; Categorize</button>}
+              {v.status === 'active'     && <button onClick={() => flash(`Document update request sent to ${v.name} — 14-day deadline set`)} className="text-xs text-blue-700 border border-blue-200 px-3 py-1 rounded-xl hover:bg-blue-50 flex items-center gap-1 font-semibold transition-colors"><RefreshCw size={11} />Request Doc Update</button>}
+              {v.status === 'show-cause' && <button onClick={() => doSuspend(v._id)} className="text-xs font-bold text-red-700 border border-red-200 px-3 py-1 rounded-xl hover:bg-red-50 flex items-center gap-1 transition-colors"><AlertTriangle size={11} />Escalate to Suspension</button>}
               <button onClick={() => flash(`${v.name}: ${v.contracts} POs · ${v.value} total value · Score ${v.score}`)} className="text-xs text-slate-500 border border-slate-200 px-3 py-1 rounded-xl hover:bg-slate-50 flex items-center gap-1 transition-colors"><FileText size={11} />View Evaluation History</button>
             </div>
           </Accordion>
@@ -539,46 +617,54 @@ function VendorTab() {
 // ════════════════════════════════════════════════════════════════
 function TenderingTab() {
   const [expanded, setExpanded] = useState(null)
-  const [tenders, setTenders] = useState(TENDERS_INIT)
   const [toastMsg, clearToast, flash] = useToast()
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ title:'', dept:'', budget:'', type:'ITB' })
 
+  const { data: apiTenders = [], refetch: refetchTenders } = useFetch(() => procurementApi.getTenders(), [])
+  const tenders = useMemo(() => {
+    const mapped = (apiTenders || []).map(mapApiTender)
+    return mapped.length ? mapped : TENDERS_INIT
+  }, [apiTenders])
+
+  const { run: publishTender, loading: tenderPublishing } = useMutation(
+    (body) => procurementApi.createTender(body),
+    {
+      onSuccess: () => {
+        refetchTenders()
+        flash('Tender published to procurement API.')
+      },
+    }
+  )
+
   function openTechBids(id) {
-    setTenders(prev => prev.map(t => t.id === id ? { ...t, evalPhase:'technical' } : t))
+    flash(`Tender ${id}: technical bids opened.`)
     flash('Technical bids unsealed — evaluation committee notified, scoring now active')
   }
   function openFinancialBids(id) {
-    setTenders(prev => prev.map(t => t.id === id ? { ...t, evalPhase:'financial' } : t))
-    flash('Financial envelopes opened — combined scores calculating automatically')
+    flash(`Tender ${id}: financial bid phase opened.`)
   }
   function scoreBids(id) {
-    setTenders(prev => prev.map(t => t.id === id ? {
-      ...t,
-      bids: t.bids.map(b => b.status === 'qualified' ? {
-        ...b,
-        combined: (b.techScore * (t.techWeight/100) + 95 * (t.priceWeight/100)).toFixed(1)
-      } : b)
-    } : t))
-    flash('Bid scores calculated and saved — evaluation report generated')
+    flash(`Tender ${id}: scoring step recorded.`)
   }
   function generatePO(id) {
     flash(`Purchase Order draft created from award ${id} — routed to Procurement Officer for review`)
   }
   function createTender() {
-    if (!form.title) return
-    const newT = {
-      id:`TDR-2026-${String(tenders.length + 10).padStart(3,'0')}`,
-      title:form.title, dept:form.dept||'General', budget:form.budget||'TBD',
-      published: new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
-      deadline:'TBD', preBidDate:null, status:'open', type:form.type,
-      techWeight:70, priceWeight:30, evalPhase:'awaiting-open', awardeeName:null,
-      bids:[], qaThread:[],
-    }
-    setTenders(prev => [...prev, newT])
-    setForm({ title:'', dept:'', budget:'', type:'ITB' })
+    if (!form.title.trim()) return
+    const n = parseFloat(String(form.budget || '').replace(/[^\d.]/g, '')) || 0
+    const publishDate = new Date().toISOString().slice(0, 10)
+    const closing = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+    publishTender({
+      title: form.title.trim(),
+      category: (form.dept || 'goods').toLowerCase().includes('service') ? 'services' : 'goods',
+      publishDate,
+      closingDate: closing,
+      estimatedValue: n,
+      description: form.dept ? `Department: ${form.dept}` : '',
+    })
+    setForm({ title: '', dept: '', budget: '', type: 'ITB' })
     setShowModal(false)
-    flash('Tender created — published to BPP portal and vendor notifications sent')
   }
 
   return (
@@ -612,8 +698,8 @@ function TenderingTab() {
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={() => setShowModal(false)} className="text-xs text-slate-500 border border-slate-200 px-4 py-2 rounded-xl hover:bg-slate-50">Cancel</button>
-            <button onClick={createTender} disabled={!form.title}
-              className="text-xs font-bold bg-[#006838] text-white px-4 py-2 rounded-xl hover:bg-[#005530] disabled:opacity-40">Publish Tender</button>
+            <button onClick={createTender} disabled={!form.title.trim() || tenderPublishing}
+              className="text-xs font-bold bg-[#006838] text-white px-4 py-2 rounded-xl hover:bg-[#005530] disabled:opacity-40">{tenderPublishing ? 'Publishing…' : 'Publish Tender'}</button>
           </div>
         </Modal>
       )}
@@ -728,31 +814,104 @@ function TenderingTab() {
 // ════════════════════════════════════════════════════════════════
 function POTab() {
   const [expanded, setExpanded] = useState(null)
-  const [pos, setPOs] = useState(PURCHASE_ORDERS_INIT)
+  const [demoPOs, setDemoPOs] = useState(() => PURCHASE_ORDERS_INIT.map((p) => ({ ...p })))
+  const [localRows, setLocalRows] = useState([])
   const [toastMsg, clearToast, flash] = useToast()
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ desc:'', vendor:'', amount:'', dept:'', planRef:'' })
 
-  function approvePO(ref) {
-    setPOs(prev => prev.map(p => p.ref === ref ? {
-      ...p, status:'approved',
-      approvals: p.approvals.map((a,i) => i === p.approvals.findIndex(x=>x.action==='pending') ? {...a, action:'approved', date:'07 Apr 2026'} : a)
-    } : p))
+  const { data: apiPOs, refetch: refetchPOs } = useFetch(() => procurementApi.getPurchaseOrders(), [])
+
+  const pos = useMemo(() => {
+    const mapped = (apiPOs || []).map(mapApiPurchaseOrder)
+    if (mapped.length) return [...mapped, ...localRows]
+    return [...demoPOs, ...localRows]
+  }, [apiPOs, demoPOs, localRows])
+
+  function patchNonApiPO(ref, patcher) {
+    if (demoPOs.some((p) => p.ref === ref)) {
+      setDemoPOs((prev) => prev.map((p) => (p.ref === ref ? patcher(p) : p)))
+      return
+    }
+    if (localRows.some((p) => p.ref === ref)) {
+      setLocalRows((prev) => prev.map((p) => (p.ref === ref ? patcher(p) : p)))
+    }
+  }
+
+  async function approvePO(ref) {
+    const row = pos.find((p) => p.ref === ref)
+    if (!row) return
+    if (row._apiId) {
+      try {
+        await procurementApi.approvePurchaseOrder(row._apiId)
+        await refetchPOs()
+        flash(`${ref} approved — procurement record updated.`)
+      } catch (e) {
+        flash(e?.response?.data?.error || e.message || 'Approve failed')
+      }
+      return
+    }
+    patchNonApiPO(ref, (p) => ({
+      ...p,
+      status: 'approved',
+      approvals: p.approvals.map((a, i) =>
+        i === p.approvals.findIndex((x) => x.action === 'pending')
+          ? { ...a, action: 'approved', date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
+          : a
+      ),
+    }))
     flash(`${ref} approved — vendor dispatch email sent`)
   }
   function sendToVendor(ref) {
-    setPOs(prev => prev.map(p => p.ref === ref ? { ...p, vendorAccepted:true } : p))
+    const row = pos.find((p) => p.ref === ref)
+    if (row?._apiId) {
+      flash(`${ref}: vendor dispatch is recorded in procurement.`)
+      return
+    }
+    patchNonApiPO(ref, (p) => ({ ...p, vendorAccepted: true }))
     flash(`${ref} sent to vendor — awaiting acceptance and delivery confirmation`)
   }
-  function confirmDelivery(ref) {
-    setPOs(prev => prev.map(p => {
-      if (p.ref !== ref) return p
-      const newP = { ...p, goodsReceived:true, invoiceSubmitted:true }
+  async function confirmDelivery(ref) {
+    const row = pos.find((p) => p.ref === ref)
+    if (row?._apiId) {
+      const lines = (row._apiItems || [])
+        .map((i) => {
+          const remain = Math.max(0, i.quantity - (i.receivedQty || 0))
+          return {
+            poItemId: i.id,
+            receivedQuantity: remain,
+            acceptedQuantity: remain,
+            rejectedQuantity: 0,
+            remarks: '',
+          }
+        })
+        .filter((l) => l.acceptedQuantity > 0)
+      if (!lines.length) {
+        flash('Nothing left to receive on this PO.')
+        return
+      }
+      try {
+        await procurementApi.postGoodsReceived({
+          purchaseOrderId: row._apiId,
+          receivedDate: new Date().toISOString().slice(0, 10),
+          receivedBy: 'Procurement workbench',
+          remarks: '',
+          items: lines,
+        })
+        await refetchPOs()
+        flash(`${ref} — goods receipt posted; PO moves to received when all lines are fully received.`)
+      } catch (e) {
+        flash(e?.response?.data?.error || e.message || 'Goods receipt failed')
+      }
+      return
+    }
+    patchNonApiPO(ref, (p) => {
+      const newP = { ...p, goodsReceived: true, invoiceSubmitted: true }
       if (newP.vendorAccepted && newP.goodsReceived && newP.invoiceSubmitted) {
         newP.matchStatus = 'matched'
       }
       return newP
-    }))
+    })
     flash(`${ref} — goods received confirmed. Three-way match complete. Payment request forwarded to Finance.`)
   }
   function createPO() {
@@ -766,7 +925,7 @@ function POTab() {
       approvals:[{ role:'Dept Head', name:'Pending', action:'pending', date:'' }],
       vendorAccepted:false, goodsReceived:false, invoiceSubmitted:false, matchStatus:null,
     }
-    setPOs(prev => [...prev, newPO])
+    setLocalRows((prev) => [...prev, newPO])
     setForm({ desc:'', vendor:'', amount:'', dept:'', planRef:'' })
     setShowModal(false)
     flash('Purchase Order created — routed to Dept Head for first-level approval')
@@ -1116,6 +1275,17 @@ const TABS = [
 
 export default function ProcurementPage() {
   const [tab, setTab] = useState('app')
+  const { data: summary } = useFetch(() => procurementApi.getSummary(), [])
+
+  const kpiRow = useMemo(() => {
+    const s = summary && typeof summary === 'object' ? summary : null
+    return [
+      { label: 'Open Tenders', value: s?.openTenders ?? TENDERS_INIT.filter((t) => t.status === 'open').length, icon: FileText, bg: 'bg-blue-50', color: 'text-blue-600' },
+      { label: 'Pending Requisitions', value: s?.pendingRequisitions ?? APP_ITEMS_INIT.filter((i) => i.status === 'pending').length, icon: ClipboardList, bg: 'bg-amber-50', color: 'text-amber-600' },
+      { label: 'Active PO Pipeline', value: s?.activePurchaseOrders ?? PURCHASE_ORDERS_INIT.filter((p) => ['pending', 'approved'].includes(p.status)).length, icon: ShoppingCart, bg: 'bg-emerald-50', color: 'text-emerald-600' },
+      { label: 'Active Vendors', value: s?.activeVendors ?? VENDORS_INIT.filter((v) => v.status === 'active').length, icon: Package, bg: 'bg-orange-50', color: 'text-orange-600' },
+    ]
+  }, [summary])
 
   return (
     <div className="animate-fade-up">
@@ -1130,12 +1300,7 @@ export default function ProcurementPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        {[
-          { label:'Open Tenders',           value: TENDERS_INIT.filter(t=>t.status==='open').length,                                                  icon: FileText,     bg:'bg-blue-50',   color:'text-blue-600'   },
-          { label:'POs Pending Approval',   value: PURCHASE_ORDERS_INIT.filter(p=>p.status==='pending').length,                                       icon: ClipboardList,bg:'bg-amber-50',  color:'text-amber-600'  },
-          { label:'Vendor Issues',          value: VENDORS_INIT.filter(v=>['show-cause','suspended'].includes(v.status)).length,                      icon: AlertTriangle,bg:'bg-red-50',    color:'text-red-600'    },
-          { label:'APP Consolidation Flags',value: APP_ITEMS_INIT.filter(i=>i.status==='flagged').length,                                             icon: Package,      bg:'bg-orange-50', color:'text-orange-600' },
-        ].map((k,i) => (
+        {kpiRow.map((k, i) => (
           <div key={i} className="stat-card flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl ${k.bg} ${k.color} flex items-center justify-center flex-shrink-0`}>
               <k.icon size={18} />
