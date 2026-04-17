@@ -64,14 +64,16 @@ INSERT INTO fin_chart_of_accounts (account_code, name, account_type, normal_bala
 ON CONFLICT DO NOTHING;
 
 -- Vendors (Finance module)
-INSERT INTO fin_vendors (vendor_code, name, contact_person, email, phone, payment_terms_days) VALUES
-  ('FVND-001', 'Nigerian Railway Corporation',      'Mr. Adamu Gambo',     'procurement@nrc.gov.ng',      '09012345678', 30),
-  ('FVND-002', 'Dangote Industrial Supplies',        'Mrs. Aisha Dangote',  'orders@dangotesupplies.com',  '08023456789', 45),
-  ('FVND-003', 'Mikano International Ltd',           'Mr. Chen Wei',        'sales@mikano.com',            '08034567890', 30),
-  ('FVND-004', 'Julius Berger Nigeria Plc',          'Engr. Hans Mueller',  'contracts@juliusberger.com',  '08045678901', 60),
-  ('FVND-005', 'HP Nigeria Partners',                'Mr. Tayo Adewale',    'enterprise@hpnigeria.com',    '08056789012', 30),
-  ('FVND-006', 'Total Energies Nigeria',             'Mrs. Funke Oladeji',  'corporate@totalenergies.ng',  '08067890123', 15),
-  ('FVND-007', 'Zinox Technologies',                 'Mr. Leo Stan Ekeh',   'govt@zinox.com',              '08078901234', 30)
+INSERT INTO fin_vendors (
+  vendor_code, name, contact_person, email, phone, address, tax_id, bank_name, bank_account, payment_terms_days
+) VALUES
+  ('FVND-001', 'Nigerian Railway Corporation', 'Mr. Adamu Gambo', 'procurement@nrc.gov.ng', '09012345678', 'Abuja, FCT', 'TIN-FVND001', 'First Bank', '2012345678', 30),
+  ('FVND-002', 'Dangote Industrial Supplies', 'Mrs. Aisha Dangote', 'orders@dangotesupplies.com', '08023456789', 'Ikoyi, Lagos', 'TIN-FVND002', 'GTBank', '0123456789', 45),
+  ('FVND-003', 'Mikano International Ltd', 'Mr. Chen Wei', 'sales@mikano.com', '08034567890', 'Victoria Island, Lagos', 'TIN-FVND003', 'Zenith Bank', '1023456789', 30),
+  ('FVND-004', 'Julius Berger Nigeria Plc', 'Engr. Hans Mueller', 'contracts@juliusberger.com', '08045678901', 'Mabushi, Abuja', 'TIN-FVND004', 'UBA', '2034567890', 60),
+  ('FVND-005', 'HP Nigeria Partners', 'Mr. Tayo Adewale', 'enterprise@hpnigeria.com', '08056789012', 'Ikeja, Lagos', 'TIN-FVND005', 'Access Bank', '0145678901', 30),
+  ('FVND-006', 'Total Energies Nigeria', 'Mrs. Funke Oladeji', 'corporate@totalenergies.ng', '08067890123', 'Victoria Island, Lagos', 'TIN-FVND006', 'Union Bank', '0167890123', 15),
+  ('FVND-007', 'Zinox Technologies', 'Mr. Leo Stan Ekeh', 'govt@zinox.com', '08078901234', 'Garki, Abuja', 'TIN-FVND007', 'Keystone Bank', '0101234567', 30)
 ON CONFLICT DO NOTHING;
 
 -- Customers
@@ -121,7 +123,7 @@ INSERT INTO fin_budget_submissions (
 SELECT fy.id, x.department_code, x.department_name, x.submission_date,
   x.amount, x.prev_year_amount, x.variance_pct, x.status, x.justification
 FROM fy
-JOIN (
+CROSS JOIN (
   VALUES
     ('TRNG', 'Training', DATE '2026-03-28', 185000000::numeric, 127500000::numeric, 45.00::numeric, 'flagged', NULL),
     ('ADMIN', 'Administration', DATE '2026-03-25', 42000000::numeric, 38900000::numeric, 8.00::numeric, 'submitted', NULL),
@@ -142,7 +144,7 @@ INSERT INTO fin_budget_virements (
 SELECT x.virement_ref, fy.id, x.from_line, x.to_line, x.amount, x.reason,
   x.status, x.requested_by, x.approval_level
 FROM fy
-JOIN (
+CROSS JOIN (
   VALUES
     ('VIR-2026-009', 'IT — Training Budget', 'IT — Software Licenses', 2000000::numeric, 'MS365 renewal exceeds training allocation', 'pending', 'IT Head', 'Finance Director'),
     ('VIR-2026-008', 'Admin — Transport', 'Admin — Vehicle Maintenance', 850000::numeric, 'Unexpected fleet repairs Q1', 'approved', 'Admin Head', 'Finance Officer'),
@@ -162,39 +164,43 @@ INSERT INTO fin_fixed_assets (asset_code, name, category, department_code, acqui
 ON CONFLICT DO NOTHING;
 
 -- Procurement Vendors
-INSERT INTO proc_vendors (vendor_code, name, contact_person, email, phone, address, registration_type, tax_id, bank_name, bank_account_no, performance_rating) VALUES
-  ('VND-001', 'Alstom Nigeria Ltd',               'Mr. Jacques Dupont',  'govt@alstom.ng',         '09012345678', '12 Marina, Lagos',                'international','TIN-ALSTM001', 'Citibank Nigeria',  '5012345678', 4.5),
-  ('VND-002', 'CCECC Nigeria Railway',             'Mr. Zhang Lin',       'procure@ccecc.com.ng',   '09023456789', '100 Airport Road, Abuja',         'international','TIN-CCECC002', 'Standard Chartered','5023456789', 4.2),
-  ('VND-003', 'Dangote Industries',                'Alhaji Sani Dangote', 'govt@dangote.com',        '08034567890', 'Falomo, Ikoyi, Lagos',            'local',        'TIN-DNGOT003', 'First Bank',        '2034567890', 4.7),
-  ('VND-004', 'Innoson Vehicle Manufacturing',     'Chief Innocent Chukwuma','sales@innoson.ng',     '08045678901', 'Nnewi, Anambra State',            'local',        'TIN-INNOS004', 'Zenith Bank',       '1045678901', 3.8),
-  ('VND-005', 'Orinshola Global Services',         'Chief Orinshola',     'info@orinshola.com',      '08056789012', '5 Adeola Odeku, VI, Lagos',       'local',        'TIN-ORINS005', 'GTBank',            '0156789012', 4.0),
-  ('VND-006', 'Siemens Mobility Nigeria',          'Mrs. Angela Schmidt', 'mobility@siemens.ng',     '09066778899', '5 Adeola Odeku, VI, Lagos',       'international','TIN-SIEMN006', 'Deutsche Bank',     '5067890123', 4.6),
-  ('VND-007', 'Nigerian Office Equipment Supplies','Mr. Emeka Uba',       'sales@noes.com.ng',       '08078901234', '22 Herbert Macaulay, Yaba, Lagos', 'local',        'TIN-NOES0007', 'Access Bank',       '0178901234', 3.5)
+INSERT INTO proc_vendors (
+  vendor_code, name, category, contact_person, email, phone, address, tax_id, registration_date, rating, compliance_status, status
+) VALUES
+  ('VND-001', 'Alstom Nigeria Ltd', 'international', 'Mr. Jacques Dupont', 'govt@alstom.ng', '09012345678', '12 Marina, Lagos', 'TIN-ALSTM001', DATE '2022-01-12', 4.5, 'compliant', 'active'),
+  ('VND-002', 'CCECC Nigeria Railway', 'international', 'Mr. Zhang Lin', 'procure@ccecc.com.ng', '09023456789', '100 Airport Road, Abuja', 'TIN-CCECC002', DATE '2022-04-19', 4.2, 'compliant', 'active'),
+  ('VND-003', 'Dangote Industries', 'local', 'Alhaji Sani Dangote', 'govt@dangote.com', '08034567890', 'Falomo, Ikoyi, Lagos', 'TIN-DNGOT003', DATE '2021-07-05', 4.7, 'compliant', 'active'),
+  ('VND-004', 'Innoson Vehicle Manufacturing', 'local', 'Chief Innocent Chukwuma', 'sales@innoson.ng', '08045678901', 'Nnewi, Anambra State', 'TIN-INNOS004', DATE '2023-03-22', 3.8, 'pending', 'active'),
+  ('VND-005', 'Orinshola Global Services', 'local', 'Chief Orinshola', 'info@orinshola.com', '08056789012', '5 Adeola Odeku, VI, Lagos', 'TIN-ORINS005', DATE '2024-02-10', 4.0, 'compliant', 'active'),
+  ('VND-006', 'Siemens Mobility Nigeria', 'international', 'Mrs. Angela Schmidt', 'mobility@siemens.ng', '09066778899', '5 Adeola Odeku, VI, Lagos', 'TIN-SIEMN006', DATE '2022-11-03', 4.6, 'compliant', 'active'),
+  ('VND-007', 'Nigerian Office Equipment Supplies', 'local', 'Mr. Emeka Uba', 'sales@noes.com.ng', '08078901234', '22 Herbert Macaulay, Yaba, Lagos', 'TIN-NOES0007', DATE '2023-08-14', 3.5, 'pending', 'active')
 ON CONFLICT DO NOTHING;
 
 -- ICT Assets
-INSERT INTO ict_assets (asset_tag, name, category, manufacturer, model, serial_number, assigned_to, department, location, purchase_date, warranty_expiry, status, ip_address) VALUES
-  ('ICT-SRV-001', 'Primary Database Server',     'server',   'Dell',    'PowerEdge R740',    'SRV740-001', 'yusuf.bello',    'ICT',   'Server Room',    '2023-06-01', '2026-06-01', 'active', '10.0.1.10'),
-  ('ICT-SRV-002', 'Application Server',           'server',   'Dell',    'PowerEdge R640',    'SRV640-002', 'yusuf.bello',    'ICT',   'Server Room',    '2023-06-01', '2026-06-01', 'active', '10.0.1.11'),
-  ('ICT-SRV-003', 'Backup Storage Server',        'server',   'HPE',     'ProLiant DL380',    'HPE380-003', 'bashir.mohammed','ICT',   'Server Room',    '2024-01-15', '2027-01-15', 'active', '10.0.1.12'),
-  ('ICT-NET-001', 'Core Switch',                   'network',  'Cisco',   'Catalyst 9300',     'CAT9300-001','bashir.mohammed','ICT',   'Network Cabinet', '2023-08-20', '2026-08-20', 'active', '10.0.1.1'),
-  ('ICT-NET-002', 'Firewall',                      'network',  'Fortinet','FortiGate 100F',    'FG100F-002', 'bashir.mohammed','ICT',   'Network Cabinet', '2023-08-20', '2026-08-20', 'active', '10.0.1.2'),
-  ('ICT-COM-001', 'DG Desktop PC',                 'computer', 'HP',      'EliteDesk 800 G9',  'HPED800-001','binta.adamu',   'DG',    'DG Office',      '2024-03-01', '2027-03-01', 'active', '10.0.10.100'),
-  ('ICT-COM-002', 'Admin Director Laptop',          'computer', 'Dell',    'Latitude 5540',     'LAT5540-002','fatima.musa',   'ADMIN', 'Admin Office',   '2024-03-01', '2027-03-01', 'active', NULL),
-  ('ICT-COM-003', 'Finance Director Desktop',       'computer', 'HP',      'ProDesk 400 G9',    'HPPD400-003','chukwuemeka.obi','FIN',  'Finance Office', '2024-03-01', '2027-03-01', 'active', '10.0.10.101'),
-  ('ICT-COM-004', 'ICT Officer Laptop',             'computer', 'Lenovo',  'ThinkPad T14s',     'LNVT14S-004','grace.okafor',  'ICT',   'ICT Office',    '2024-06-15', '2027-06-15', 'active', NULL),
-  ('ICT-PRN-001', 'Admin Office Printer',            'printer',  'HP',      'LaserJet Enterprise','HPLJ-001',  NULL,            'ADMIN', 'Admin Floor',    '2024-02-15', '2027-02-15', 'active', '10.0.10.200'),
-  ('ICT-PRN-002', 'Finance Office Printer',           'printer',  'HP',      'LaserJet Enterprise','HPLJ-002',  NULL,            'FIN',   'Finance Floor',  '2024-02-15', '2027-02-15', 'active', '10.0.10.201')
+INSERT INTO ict_assets (
+  asset_tag, asset_type, make_model, serial_number, assigned_to, department, location, status, purchase_date, warranty_expiry, purchase_cost, notes
+) VALUES
+  ('ICT-SRV-001', 'server', 'Dell PowerEdge R740', 'SRV740-001', 'yusuf.bello', 'ICT', 'Server Room', 'active', DATE '2023-06-01', DATE '2026-06-01', 12000000, 'Primary database server'),
+  ('ICT-SRV-002', 'server', 'Dell PowerEdge R640', 'SRV640-002', 'yusuf.bello', 'ICT', 'Server Room', 'active', DATE '2023-06-01', DATE '2026-06-01', 9800000, 'Application server'),
+  ('ICT-SRV-003', 'server', 'HPE ProLiant DL380', 'HPE380-003', 'bashir.mohammed', 'ICT', 'Server Room', 'active', DATE '2024-01-15', DATE '2027-01-15', 10500000, 'Backup storage server'),
+  ('ICT-NET-001', 'network', 'Cisco Catalyst 9300', 'CAT9300-001', 'bashir.mohammed', 'ICT', 'Network Cabinet', 'active', DATE '2023-08-20', DATE '2026-08-20', 6400000, 'Core switch'),
+  ('ICT-NET-002', 'network', 'Fortinet FortiGate 100F', 'FG100F-002', 'bashir.mohammed', 'ICT', 'Network Cabinet', 'active', DATE '2023-08-20', DATE '2026-08-20', 7800000, 'Perimeter firewall'),
+  ('ICT-COM-001', 'computer', 'HP EliteDesk 800 G9', 'HPED800-001', 'binta.adamu', 'DG', 'DG Office', 'active', DATE '2024-03-01', DATE '2027-03-01', 1100000, 'DG desktop PC'),
+  ('ICT-COM-002', 'computer', 'Dell Latitude 5540', 'LAT5540-002', 'fatima.musa', 'ADMIN', 'Admin Office', 'active', DATE '2024-03-01', DATE '2027-03-01', 1350000, 'Admin director laptop'),
+  ('ICT-COM-003', 'computer', 'HP ProDesk 400 G9', 'HPPD400-003', 'chukwuemeka.obi', 'FIN', 'Finance Office', 'active', DATE '2024-03-01', DATE '2027-03-01', 980000, 'Finance director desktop'),
+  ('ICT-COM-004', 'computer', 'Lenovo ThinkPad T14s', 'LNVT14S-004', 'grace.okafor', 'ICT', 'ICT Office', 'active', DATE '2024-06-15', DATE '2027-06-15', 1420000, 'ICT officer laptop'),
+  ('ICT-PRN-001', 'printer', 'HP LaserJet Enterprise', 'HPLJ-001', NULL, 'ADMIN', 'Admin Floor', 'active', DATE '2024-02-15', DATE '2027-02-15', 780000, 'Shared admin printer'),
+  ('ICT-PRN-002', 'printer', 'HP LaserJet Enterprise', 'HPLJ-002', NULL, 'FIN', 'Finance Floor', 'active', DATE '2024-02-15', DATE '2027-02-15', 780000, 'Shared finance printer')
 ON CONFLICT DO NOTHING;
 
 -- ICT Systems
-INSERT INTO ict_systems (name, description, system_type, url, health_status, uptime_percent, owner, department) VALUES
-  ('NAPTIN ERP Portal',     'Enterprise Resource Planning system',  'web_app',    'https://portal.naptin.gov.ng',     'healthy',  99.8, 'ICT Department', 'ICT'),
-  ('Email Server',          'Microsoft Exchange Online',             'cloud',      'https://outlook.office365.com',    'healthy',  99.9, 'ICT Department', 'ICT'),
-  ('Training LMS',          'Learning Management System (Moodle)',   'web_app',    'https://lms.naptin.gov.ng',        'healthy',  98.5, 'Training Dept',  'TRNG'),
-  ('IPPIS Integration',     'Personnel payroll interface to IPPIS',  'integration','https://ippis.gov.ng',             'degraded', 95.0, 'Finance Dept',   'FIN'),
-  ('Backup System',         'Veeam backup and disaster recovery',    'on_premise', NULL,                               'healthy',  99.5, 'ICT Department', 'ICT'),
-  ('Biometric Attendance',  'Fingerprint attendance terminals',      'on_premise', NULL,                               'healthy',  97.0, 'Admin Dept',     'ADMIN'),
-  ('CCTV Monitoring',       'IP camera surveillance system',         'on_premise', NULL,                               'warning',  94.5, 'Security Unit',  'OPS'),
-  ('Internet Gateway',      'ISP connectivity (MainOne + MTN)',      'network',    NULL,                               'healthy',  98.0, 'ICT Department', 'ICT')
+INSERT INTO ict_systems (name, host, db_engine, status, uptime_pct, last_checked_at, monitoring_url, owner) VALUES
+  ('NAPTIN ERP Portal', 'portal.naptin.gov.ng', 'postgresql', 'operational', 99.80, NOW(), 'https://portal.naptin.gov.ng', 'ICT Department'),
+  ('Email Server', 'outlook.office365.com', 'cloud', 'operational', 99.90, NOW(), 'https://outlook.office365.com', 'ICT Department'),
+  ('Training LMS', 'lms.naptin.gov.ng', 'postgresql', 'operational', 98.50, NOW(), 'https://lms.naptin.gov.ng', 'Training Dept'),
+  ('IPPIS Integration', 'ippis.gov.ng', 'oracle', 'degraded', 95.00, NOW(), 'https://ippis.gov.ng', 'Finance Dept'),
+  ('Backup System', 'backup.naptin.local', 'veeam', 'operational', 99.50, NOW(), NULL, 'ICT Department'),
+  ('Biometric Attendance', 'bio-attendance.naptin.local', 'embedded', 'operational', 97.00, NOW(), NULL, 'Admin Dept'),
+  ('CCTV Monitoring', 'cctv.naptin.local', 'nvr', 'degraded', 94.50, NOW(), NULL, 'Security Unit'),
+  ('Internet Gateway', 'edge.naptin.local', 'network', 'operational', 98.00, NOW(), NULL, 'ICT Department')
 ON CONFLICT DO NOTHING;
