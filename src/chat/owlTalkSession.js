@@ -24,7 +24,7 @@ export async function ensureOwlTalkSession(portalUser, options = {}) {
   const password = `naptin-${Math.abs(hash).toString(36)}`
 
   try {
-    const login = await axios.post(`${base}/login`, { username, password }, cfg)
+    const login = await axios.post(`${base}/login`, { username, email, password }, cfg)
     if (login.data?.user) return { ok: true, user: login.data.user }
   } catch (e) {
     if (e?.code === 'ERR_CANCELED') throw e
@@ -35,6 +35,13 @@ export async function ensureOwlTalkSession(portalUser, options = {}) {
     if (reg.data?.user) return { ok: true, user: reg.data.user }
   } catch (e) {
     if (e?.code === 'ERR_CANCELED') throw e
+    // User may exist from seed / old password — align to portal deterministic secret when server allows it
+    try {
+      const sync = await axios.post(`${base}/portal-sync`, { email, password }, cfg)
+      if (sync.data?.user) return { ok: true, user: sync.data.user }
+    } catch {
+      /* ignore — try /me below */
+    }
   }
 
   try {

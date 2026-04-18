@@ -51,6 +51,8 @@ module.exports = {
         OWL_TALK_PORT: '4003',
         /* Repo ships dev/ssl/*.pem — without this, Owl listens HTTPS-only and http:// browsers get connection resets */
         OWL_TALK_DISABLE_SSL: '1',
+        /* Match portal chat bootstrap when DB user exists with a different password (seed). Disable on untrusted WAN. */
+        OWL_PORTAL_SYNC: '1',
         ...(owlDb ? { OWL_TALK_DATABASE_URL: owlDb, DATABASE_URL: owlDb } : {}),
         ...(process.env.OWL_TALK_CORS_ORIGINS
           ? { OWL_TALK_CORS_ORIGINS: process.env.OWL_TALK_CORS_ORIGINS }

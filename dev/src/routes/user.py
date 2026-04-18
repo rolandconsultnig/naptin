@@ -55,7 +55,10 @@ def login():
         return jsonify({'error': 'Username and password required'}), 400
     
     user = User.query.filter_by(username=data['username']).first()
-    
+    # Portal chat uses display name vs DB username — allow lookup by email when provided
+    if user is None and data.get('email'):
+        user = User.query.filter_by(email=data['email']).first()
+
     if user and user.check_password(data['password']) and not user.is_banned:
         # Update last seen
         user.last_seen = datetime.utcnow()
@@ -78,6 +81,32 @@ def login():
         return response
     else:
         return jsonify({'error': 'Invalid credentials or account banned'}), 401
+
+
+@user_bp.route('/portal-sync', methods=['POST'])
+def portal_sync():
+    """Set password to portal-derived secret and create session when user exists but password differs (seed vs SPA).
+
+    Only accepts passwords produced by the SPA (`naptin-` prefix). Enable with OWL_PORTAL_SYNC=1.
+    """
+    if os.environ.get('OWL_PORTAL_SYNC', '').lower() not in ('1', 'true', 'yes'):
+        return jsonify({'error': 'Portal sync disabled'}), 403
+    data = request.get_json()
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'email and password required'}), 400
+    pwd = str(data['password'])
+    if not pwd.startswith('naptin-'):
+        return jsonify({'error': 'Invalid sync password format'}), 400
+    user = User.query.filter_by(email=data['email']).first()
+    if not user:
+        return jsonify({'error': 'No user for email'}), 404
+    user.set_password(pwd)
+    db.session.commit()
+    session.clear()
+    session['user_id'] = user.id
+    session.modified = True
+    return jsonify({'message': 'Synced', 'user': user.to_dict()})
+
 
 @user_bp.route('/logout', methods=['POST'])
 def logout():
