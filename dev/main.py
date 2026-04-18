@@ -86,6 +86,21 @@ _CORS_STRING_ORIGINS = [
     'https://192.168.37.11:6677', 'http://192.168.37.11:6677',
 ] + list(_EXTRA_CORS_ORIGINS)
 
+_CORS_ORIGIN_STRING_SET = frozenset(_CORS_STRING_ORIGINS)
+
+
+def _socketio_allow_origin(origin):
+    """python-engineio does not reliably honor compiled regex objects in cors_allowed_origins lists."""
+    if origin is None or origin == '':
+        return True
+    if origin in _CORS_ORIGIN_STRING_SET:
+        return True
+    for rx in _CORS_REGEXES:
+        if rx.match(origin):
+            return True
+    return False
+
+
 CORS(
     app,
     supports_credentials=True,
@@ -99,13 +114,10 @@ CORS(
 Session(app)
 
 
-# Same rules as Flask-CORS (no "*" — credentialed clients require explicit / pattern origins).
-_SOCKETIO_CORS_ORIGINS = _CORS_STRING_ORIGINS + list(_CORS_REGEXES)
-
-# Initialize SocketIO with threading mode for better Windows compatibility
+# Same rules as Flask-CORS — use callable so Socket.IO polling gets Access-Control-Allow-Origin on :4001 + any LAN IP.
 socketio = SocketIO(
     app,
-    cors_allowed_origins=_SOCKETIO_CORS_ORIGINS,
+    cors_allowed_origins=_socketio_allow_origin,
     supports_credentials=True,
     async_mode='threading',
 )
