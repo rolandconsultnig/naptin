@@ -147,7 +147,16 @@ function ChatReplyQuoteBar({ preview, compact }) {
 export function OwlChatApp() {
   const { user, logout } = useAuth()
   const { addNotification } = useNotifications()
-  const { socket, connected, owlTalkUser, sendMessage, joinChat, startTyping, stopTyping } = useChatSocket()
+  const {
+    socket,
+    connected,
+    owlTalkUser,
+    sessionPrimed,
+    sendMessage,
+    joinChat,
+    startTyping,
+    stopTyping,
+  } = useChatSocket()
   const { startCall } = useChatCall()
   const owlUser = useMemo(
     () => ({
@@ -974,10 +983,21 @@ export function OwlChatApp() {
 
   return (
       <div className="flex h-full min-h-0 bg-[#e9edef]">
-      {/* Socket.IO Connection Status */}
-      {hasChatBackend() && !connected && (
+      {/* Chat connection status — avoid "Connecting" when no socket exists (session/Owl login failed). */}
+      {hasChatBackend() && user && !sessionPrimed && (
+        <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white text-center py-2 text-sm z-50">
+          Signing in to Owl Talk… Please wait
+        </div>
+      )}
+      {hasChatBackend() && user && sessionPrimed && !owlTalkUser && (
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-2 text-sm z-50 px-2">
+          Chat session could not be established (Owl Talk login). Check that the chat API on port 4003 is
+          reachable, CORS allows this origin, and portal sync credentials match the server.
+        </div>
+      )}
+      {hasChatBackend() && socket && !connected && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 text-sm z-50">
-          ⚠️ Connecting to server... Please wait
+          Connecting to chat server… Please wait
         </div>
       )}
       

@@ -134,6 +134,7 @@ export function ChatSocketProvider({ children }) {
     socket,
     connected,
     owlTalkUser,
+    sessionPrimed,
     sendMessage,
     joinChat,
     startTyping,
