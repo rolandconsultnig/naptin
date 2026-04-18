@@ -72,6 +72,11 @@ export function getSocketIoClientOptions() {
       upgrade: false,
     }
   }
+  // UI on :4001 + Owl on :4003 (different origins): WebSocket upgrade often fails on threading/Werkzeug or firewalls;
+  // Engine.IO long-polling is reliable and still sends session cookies.
+  if (!isLocalDevHost()) {
+    return { transports: ['polling', 'websocket'], upgrade: true }
+  }
   return { transports: ['websocket', 'polling'] }
 }
 
