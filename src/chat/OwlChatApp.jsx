@@ -219,7 +219,19 @@ export function OwlChatApp() {
     const myChatId = owlTalkUser?.id ?? user?.chatUserId ?? 1
 
     const loadUsers = async () => {
-      await ensureOwlTalkSession(user)
+      const ot = await ensureOwlTalkSession(user)
+      if (!ot.ok) {
+        setUsers(buildStaffChatList())
+        if (!usersLoadWarnedRef.current) {
+          usersLoadWarnedRef.current = true
+          toast.error(
+            'Owl Talk session could not be created (login/register/sync failed). Pull latest server code, set OWL_PORTAL_SYNC=1 for naptin-chat if users already exist in the DB, then pm2 restart naptin-chat. Showing directory preview.',
+            { id: 'chat-users-fallback' }
+          )
+        }
+        return
+      }
+
       try {
         const response = await axios.get(`${getApiBase()}/users`, {
           withCredentials: true,
@@ -248,14 +260,34 @@ export function OwlChatApp() {
         setUsers(buildStaffChatList())
         if (!usersLoadWarnedRef.current) {
           usersLoadWarnedRef.current = true
-          console.warn(
-            'Chat user list: server unavailable — using directory preview. Start Owl Talk (dev/main.py on :4003), open firewall TCP 4003, and ensure PM2 app naptin-chat is running. Dev: Vite proxies /proxy-chat-api → 127.0.0.1:4003.',
-            error?.message || error
-          )
-          toast.error(
-            'Cannot reach chat server (port 4003). On the server: create dev/venv, pip install -r dev/requirements.txt, pm2 restart naptin-chat, open port 4003. Using directory preview.',
-            { id: 'chat-users-fallback' }
-          )
+          const status = error?.response?.status
+          const net =
+            error?.code === 'ERR_NETWORK' ||
+            error?.message === 'Network Error' ||
+            String(error?.message || '').includes('ECONNREFUSED')
+
+          if (status === 401 || status === 403) {
+            console.warn('Chat user list: not authorized on Owl Talk — session/cookie missing.', error)
+            toast.error(
+              'Chat contacts need an Owl Talk login (401). Ensure cookies work across :4001 and :4003, CORS on the chat server, and OWL_PORTAL_SYNC if your DB user predates automatic passwords. Showing directory preview.',
+              { id: 'chat-users-fallback' }
+            )
+          } else if (net) {
+            console.warn(
+              'Chat user list: server unreachable — using directory preview.',
+              error?.message || error
+            )
+            toast.error(
+              'Cannot reach chat server (port 4003). On the server: dev/venv, pip install -r dev/requirements.txt, pm2 restart naptin-chat, open TCP 4003 in the firewall/security group. Showing directory preview.',
+              { id: 'chat-users-fallback' }
+            )
+          } else {
+            console.warn('Chat user list: request failed — using directory preview.', error?.message || error)
+            toast.error(
+              `Chat server error (${status || 'unknown'}). Showing directory preview.`,
+              { id: 'chat-users-fallback' }
+            )
+          }
         }
       }
     }
