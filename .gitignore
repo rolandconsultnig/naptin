@@ -34,3 +34,9 @@ ios/
 
 # Test / coverage
 coverage/
+
+# Owl Talk / Flask runtime (local dev)
+flask_session/
+
+# Local profile uploads (portal)
+uploads/profiles/

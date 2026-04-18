@@ -4,13 +4,17 @@ import { useNotifications } from '../context/NotificationContext'
 import {
   getApiBase,
   hasChatBackend,
+  inferChatMessageType,
   isChatEnvForcedOffline,
   isChatForcedOffline,
+  messageShowsAsAudio,
+  messageShowsAsImage,
+  resolveChatAssetUrl,
 } from './chatConfig'
 import { ensureOwlTalkSession } from './owlTalkSession'
 import { useChatSocket } from './ChatSocketContext'
 import { useChatCall } from './ChatCallContext'
-import { Search, MoreVertical, Smile, Paperclip, Send, Phone, Video, MessageCircle, Shield, Edit2, Trash2, Check, CheckCheck, Reply, Forward, Mic, Star, Archive, X, Play, Users, Settings } from 'lucide-react'
+import { Search, MoreVertical, Smile, Paperclip, Send, Phone, Video, MessageCircle, Shield, Edit2, Trash2, Check, CheckCheck, Reply, Forward, Mic, Star, Archive, X, Play, Users, Settings, FileText } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -30,6 +34,114 @@ function staffToChatUserId(raw) {
 function sameChatUser(a, b) {
   if (a === b) return true
   return Number(a) === Number(b)
+}
+
+/** Optimistic temp IDs use Date.now() — real DB ids stay below this threshold. */
+const TEMP_MESSAGE_ID_MIN = 1000000000000
+
+function normalizeMsgId(id) {
+  const n = Number(id)
+  return Number.isFinite(n) ? n : id
+}
+
+function idsEqual(a, b) {
+  return normalizeMsgId(a) === normalizeMsgId(b)
+}
+
+/** Merge server ack with optimistic row so reply_preview is never dropped if the ack is incomplete. */
+function mergeServerAck(serverMsg, optimistic) {
+  if (!optimistic || normalizeMsgId(optimistic.id) < TEMP_MESSAGE_ID_MIN) return serverMsg
+  const merged = { ...serverMsg }
+  merged.reply_preview = merged.reply_preview ?? optimistic.reply_preview
+  merged.reply_to_id = merged.reply_to_id ?? optimistic.reply_to_id
+  return merged
+}
+
+function buildClientPreviewFromMessage(msg) {
+  if (!msg) return null
+  const mid = normalizeMsgId(msg.id)
+  return {
+    message_id: Number.isFinite(mid) ? mid : msg.id,
+    sender_id: msg.sender_id,
+    sender_username: msg.sender_username,
+    message_type: msg.message_type,
+    content: msg.content,
+    file_name: msg.file_name,
+  }
+}
+
+function stableReplyToId(msg) {
+  if (!msg) return null
+  const n = normalizeMsgId(msg.id)
+  if (!Number.isFinite(n)) return null
+  if (n >= TEMP_MESSAGE_ID_MIN) return null
+  return n
+}
+
+/** Quoted original shown above the reply (composer + bubbles). */
+function ChatReplyQuoteBar({ preview, compact }) {
+  if (!preview) return null
+  const synthetic = {
+    content: preview.content,
+    message_type: preview.message_type,
+    file_name: preview.file_name,
+  }
+  const label = preview.sender_username || 'User'
+  const pad = compact ? 'py-1' : 'py-2'
+
+  if (messageShowsAsImage(synthetic)) {
+    const src = resolveChatAssetUrl((preview.content || '').trim())
+    return (
+      <div className={`flex gap-2 items-center min-w-0 ${pad}`}>
+        <img
+          src={src}
+          alt=""
+          className="h-10 w-10 rounded object-cover flex-shrink-0 bg-black/10"
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none'
+          }}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-[#008069] truncate">{label}</p>
+          <p className="text-xs text-gray-500">Photo</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (messageShowsAsAudio(synthetic)) {
+    return (
+      <div className={`flex gap-2 items-center min-w-0 ${pad}`}>
+        <Play className="h-8 w-8 text-[#008069] flex-shrink-0 opacity-80" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-[#008069] truncate">{label}</p>
+          <p className="text-xs text-gray-500">Voice message</p>
+        </div>
+      </div>
+    )
+  }
+
+  const fileMatch = /^\[([^\]]+)\s*\([\d.]+\s*KB\)\]$/i.exec((preview.content || '').trim())
+  if (fileMatch) {
+    return (
+      <div className={`flex gap-2 items-center min-w-0 ${pad}`}>
+        <FileText className="h-8 w-8 text-gray-500 flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-[#008069] truncate">{label}</p>
+          <p className="text-xs text-gray-600 truncate">{fileMatch[1]}</p>
+        </div>
+      </div>
+    )
+  }
+
+  const text = (preview.content || '').trim()
+  return (
+    <div className={`min-w-0 ${pad}`}>
+      <p className="text-xs font-semibold text-[#008069] truncate">{label}</p>
+      <p className={`text-sm text-gray-700 ${compact ? 'truncate' : 'line-clamp-2'}`}>{text.slice(0, 240)}</p>
+    </div>
+  )
 }
 
 export function OwlChatApp() {
@@ -77,6 +189,11 @@ export function OwlChatApp() {
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
+  const replyingToRef = useRef(null)
+
+  useEffect(() => {
+    replyingToRef.current = replyingTo
+  }, [replyingTo])
 
   const buildStaffChatList = () =>
     STAFF.filter((s) => s.email !== user?.email).map((s) => ({
@@ -153,7 +270,7 @@ export function OwlChatApp() {
     socket.on('receive_message', (message) => {
       console.log('📩 Received message:', message)
       setMessages((prev) => {
-        const exists = prev.some(m => m.id === message.id)
+        const exists = prev.some((m) => idsEqual(m.id, message.id))
         if (exists) return prev
         return [...prev, message]
       })
@@ -187,17 +304,23 @@ export function OwlChatApp() {
       console.log('✅ Message confirmed sent:', message)
       setMessages((prev) => {
         // Replace temporary messages (those with timestamp IDs) with the real message
-        const updatedMessages = prev.map(m => 
-          m.id === message.id ? message : m
+        const updatedMessages = prev.map((m) =>
+          idsEqual(m.id, message.id) ? mergeServerAck(message, m) : m
         )
         // If message not found, try to find and replace a temporary message
-        const hasMessage = updatedMessages.some(m => m.id === message.id)
+        const hasMessage = updatedMessages.some((m) => idsEqual(m.id, message.id))
         if (!hasMessage && prev.length > 0) {
           // Find the most recent temporary message that matches content
           for (let i = prev.length - 1; i >= 0; i--) {
             const m = prev[i]
-            if (m.id >= 1000000000000 && m.content === message.content && sameChatUser(m.sender_id, owlUser.id)) {
-              updatedMessages[i] = message
+            const mid = normalizeMsgId(m.id)
+            if (
+              Number.isFinite(mid) &&
+              mid >= TEMP_MESSAGE_ID_MIN &&
+              m.content === message.content &&
+              sameChatUser(m.sender_id, owlUser.id)
+            ) {
+              updatedMessages[i] = mergeServerAck(message, m)
               return updatedMessages
             }
           }
@@ -296,6 +419,7 @@ export function OwlChatApp() {
     if (!newMessage.trim()) return
 
     const messageContent = newMessage.trim()
+    const outgoingType = inferChatMessageType(messageContent)
 
     // If editing, update the message (only if it's a real database ID, not a temporary one)
       if (editingMessageId && editingMessageId < 1000000000000) {
@@ -335,18 +459,24 @@ export function OwlChatApp() {
       if (editingMessageId) {
         setEditingMessageId(null)
       }
-      
+
+      const replyPreviewSnap = replyingTo ? buildClientPreviewFromMessage(replyingTo) : null
+      const replyToId = stableReplyToId(replyingTo)
+      setReplyingTo(null)
+
       // Add message to UI immediately (optimistic update)
       const tempMessage = {
         id: Date.now(), // Temporary ID
         sender_id: owlUser.id,
         receiver_id: selectedChat.id,
         content: messageContent,
-        message_type: 'text',
+        message_type: outgoingType,
         timestamp: new Date().toISOString(),
-        is_read: false
+        is_read: false,
+        ...(replyToId != null ? { reply_to_id: replyToId } : {}),
+        ...(replyPreviewSnap ? { reply_preview: replyPreviewSnap } : {}),
       }
-      
+
       setMessages((prev) => [...prev, tempMessage])
       setNewMessage('')
       stopTyping(selectedChat.id)
@@ -372,7 +502,7 @@ export function OwlChatApp() {
         return
       }
 
-    sendMessage(selectedChat.id, messageContent)
+    sendMessage(selectedChat.id, messageContent, outgoingType, replyToId)
   }
   
   const handleDeleteMessage = async (messageId) => {
@@ -492,12 +622,16 @@ export function OwlChatApp() {
           })
           
           const audioUrl = uploadResponse.data.file_path
-          
+
+          const rt = replyingToRef.current
+          const replyToId = stableReplyToId(rt)
+          if (replyToId != null) setReplyingTo(null)
+
           // Send as message
           if (socket && connected && selectedChat) {
-            sendMessage(selectedChat.id, audioUrl, 'audio')
+            sendMessage(selectedChat.id, audioUrl, 'audio', replyToId)
           }
-          
+
           toast.success('Voice message sent')
         } catch (error) {
           console.error('Failed to upload voice message:', error)
@@ -563,14 +697,20 @@ export function OwlChatApp() {
         withCredentials: true,
       })
       
-      const loadedMessages = response.data.map(msg => ({
+      const loadedMessages = response.data.map((msg) => ({
         id: msg.id,
         sender_id: msg.sender_id,
         receiver_id: msg.receiver_id,
         content: msg.content,
         message_type: msg.message_type || 'text',
         timestamp: msg.timestamp,
-        is_read: msg.is_read
+        is_read: msg.is_read,
+        reply_to_id: msg.reply_to_id ?? null,
+        reply_preview: msg.reply_preview ?? null,
+        sender_username: msg.sender_username,
+        file_name: msg.file_name,
+        file_path: msg.file_path,
+        file_url: msg.file_url,
       }))
       
       setMessages(loadedMessages)
@@ -768,14 +908,19 @@ export function OwlChatApp() {
       const fileName = response.data.file_name
       const fileSize = response.data.file_size
 
-      // Determine message type based on file extension
       const isImage = file.type.startsWith('image/')
-      const messageType = isImage ? 'image' : 'file'
 
       if (isImage) {
-        // For images, send as content with URL
-        setNewMessage(`${newMessage} ${getApiBase().replace('/api', '')}${fileUrl}`)
-        toast.success('Image attached!')
+        if (selectedChat && socket && connected) {
+          const rt = replyingToRef.current
+          const replyToId = stableReplyToId(rt)
+          if (replyToId != null) setReplyingTo(null)
+          sendMessage(selectedChat.id, fileUrl, 'image', replyToId)
+          toast.success('Image sent')
+        } else {
+          setNewMessage((prev) => `${prev} ${fileUrl}`.trim())
+          toast.success('Image attached — select a chat and send')
+        }
       } else {
         // For files, just send the filename
         setNewMessage(`${newMessage} [${fileName} (${(fileSize / 1024).toFixed(2)} KB)]`)
@@ -999,33 +1144,43 @@ export function OwlChatApp() {
                   key={msg.id || index}
                   className={`flex ${sameChatUser(msg.sender_id, owlUser.id) ? 'justify-end' : 'justify-start'} mb-2 group`}
                 >
-                  <div className={`relative ${
+                  <div className={`relative flex flex-col gap-1 min-w-0 ${
                     sameChatUser(msg.sender_id, owlUser.id) ? 'message-sent' : 'message-received'
                   }`}>
-                    {/* Check if content is an image URL */}
-                    {msg.content && msg.content.startsWith('http') && /\.(jpg|jpeg|png|gif|webp)/i.test(msg.content) ? (
-                      <img 
-                        src={msg.content} 
-                        alt="Shared image" 
-                        className="max-w-xs rounded-lg"
+                    {msg.reply_preview ? (
+                      <div className="pl-2 border-l-[3px] border-[#008069]/60 bg-black/[0.06] rounded-sm overflow-hidden w-full min-w-0">
+                        <ChatReplyQuoteBar preview={msg.reply_preview} compact />
+                      </div>
+                    ) : null}
+
+                    {messageShowsAsImage(msg) ? (
+                      <img
+                        src={resolveChatAssetUrl(msg.content.trim())}
+                        alt=""
+                        className="max-w-xs max-h-80 rounded-lg object-contain bg-black/5"
+                        loading="lazy"
                         onError={(e) => {
-                          e.target.style.display = 'none'
-                          e.target.nextSibling.style.display = 'block'
+                          e.currentTarget.style.display = 'none'
                         }}
                       />
                     ) : null}
-                    
-                    {/* Check if content is an audio file */}
-                    {msg.message_type === 'audio' && msg.content && msg.content.startsWith('http') ? (
-                      <div className="bg-white p-3 rounded-lg flex items-center gap-2">
-                        <Play className="h-5 w-5 text-blue-600" />
-                        <audio src={msg.content} controls className="flex-1" />
+
+                    {messageShowsAsAudio(msg) ? (
+                      <div className="bg-white p-3 rounded-lg flex items-center gap-2 min-w-[200px]">
+                        <Play className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                        <audio src={resolveChatAssetUrl(msg.content.trim())} controls className="flex-1 max-w-full" />
                       </div>
                     ) : null}
-                    
-                    <p className="text-sm whitespace-pre-wrap break-words" style={{
-                      display: (msg.content && msg.content.startsWith('http') && /\.(jpg|jpeg|png|gif|webp)/i.test(msg.content)) || msg.message_type === 'audio' ? 'none' : 'block'
-                    }}>{msg.content}</p>
+
+                    <p
+                      className="text-sm whitespace-pre-wrap break-words"
+                      style={{
+                        display:
+                          messageShowsAsImage(msg) || messageShowsAsAudio(msg) ? 'none' : 'block',
+                      }}
+                    >
+                      {msg.content}
+                    </p>
                     <div className="flex items-center justify-end gap-2 mt-1">
                       <span className="text-xs">
                         {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -1117,10 +1272,10 @@ export function OwlChatApp() {
             <div className="bg-[#f0f2f5] px-4 py-3 flex flex-col space-y-2 relative">
               {/* Reply Preview */}
               {replyingTo && (
-                <div className="bg-white px-3 py-2 rounded-lg border-l-4 border-green-500 flex items-center justify-between">
+                <div className="bg-white px-3 py-2 rounded-lg border-l-4 border-green-500 flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-green-600 font-medium">Replying to message</p>
-                    <p className="text-sm text-gray-700 truncate">{replyingTo.content}</p>
+                    <p className="text-xs text-green-600 font-medium mb-0.5">Replying to</p>
+                    <ChatReplyQuoteBar preview={buildClientPreviewFromMessage(replyingTo)} />
                   </div>
                   <button
                     onClick={() => setReplyingTo(null)}

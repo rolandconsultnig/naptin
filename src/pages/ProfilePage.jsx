@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { NAPTIN_LOGO } from '../assets/images'
-import { Mail, Phone, MapPin, Briefcase, Hash, Shield, Save, UploadCloud } from 'lucide-react'
+import { Mail, Phone, MapPin, Briefcase, Hash, Shield, Save, UploadCloud, Lock } from 'lucide-react'
 import { hrmsApi } from '../services/hrmsService'
+import { UserAvatar } from '../components/UserAvatar'
 
 function fmtDate(v) {
   if (!v) return '—'
@@ -14,7 +15,17 @@ function fmtDate(v) {
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, updateProfile } = useAuth()
+  const portalPhotoRef = useRef(null)
+  const [portalForm, setPortalForm] = useState({
+    name: '',
+    phone: '',
+    location: '',
+    bio: '',
+  })
+  const [portalSaving, setPortalSaving] = useState(false)
+  const [portalPhotoBusy, setPortalPhotoBusy] = useState(false)
+  const [portalNote, setPortalNote] = useState('')
   const [employee, setEmployee] = useState(null)
   const [employeeId, setEmployeeId] = useState(null)
   const [documents, setDocuments] = useState([])
@@ -41,6 +52,106 @@ export default function ProfilePage() {
   })
 
   const email = String(user?.email || '').trim().toLowerCase()
+
+  const avatarUser = useMemo(
+    () =>
+      user
+        ? {
+            ...user,
+            profilePicture: user.profilePicture || employee?.profilePhotoUrl || null,
+          }
+        : null,
+    [user, employee?.profilePhotoUrl]
+  )
+
+  useEffect(() => {
+    if (!user) return
+    if (employee?.id) {
+      setPortalForm({
+        name: employee.portalDisplayName || employee.name || user.name || '',
+        phone: employee.phone ?? '',
+        location: employee.officeLocation ?? '',
+        bio: employee.portalBio ?? '',
+      })
+      return
+    }
+    setPortalForm({
+      name: user.name || '',
+      phone: user.phone || '',
+      location: user.location || '',
+      bio: user.bio ?? '',
+    })
+  }, [user, employee?.id, employee?.updatedAt])
+
+  const handlePortalPhoto = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setPortalNote('Choose an image file (PNG, JPG, or WebP).')
+      return
+    }
+    if (file.size > 600 * 1024) {
+      setPortalNote('Image must be 600KB or smaller.')
+      return
+    }
+    setPortalPhotoBusy(true)
+    setPortalNote('')
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result
+      if (typeof dataUrl !== 'string' || dataUrl.length > 900_000) {
+        setPortalNote('Image is too large for browser storage. Try a smaller file.')
+        setPortalPhotoBusy(false)
+        return
+      }
+      void (async () => {
+        try {
+          const r = await updateProfile({ profilePicture: dataUrl })
+          if (r?.employee) setEmployee(r.employee)
+          setPortalNote(
+            r?.ok ? 'Profile photo saved to HR database.' : 'Photo saved on this device only; HR database was not updated.'
+          )
+        } finally {
+          setPortalPhotoBusy(false)
+        }
+      })()
+    }
+    reader.onerror = () => {
+      setPortalNote('Could not read the image file.')
+      setPortalPhotoBusy(false)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handlePortalSave = async () => {
+    if (!updateProfile) return
+    setPortalSaving(true)
+    setPortalNote('')
+    try {
+      const r = await updateProfile({
+        name: portalForm.name.trim() || user?.name || 'User',
+        phone: portalForm.phone.trim(),
+        location: portalForm.location.trim(),
+        bio: portalForm.bio.trim(),
+      })
+      if (r?.employee) setEmployee(r.employee)
+      setPortalNote(
+        r?.ok ? 'Portal profile saved to HR database.' : 'Saved on this device only; HR database was not updated (run API and npm run db:hrms:portal).'
+      )
+    } finally {
+      setPortalSaving(false)
+    }
+  }
+
+  const clearPortalPhoto = async () => {
+    if (!updateProfile) return
+    const r = await updateProfile({ profilePicture: null })
+    if (r?.employee) setEmployee(r.employee)
+    setPortalNote(
+      r?.ok ? 'Profile photo removed from HR database.' : 'Photo cleared on this device only; HR database was not updated.'
+    )
+  }
 
   const loadProfile = async () => {
     if (!email) {
@@ -159,16 +270,99 @@ export default function ProfilePage() {
       ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="card xl:col-span-1">
+        <div className="card xl:col-span-1 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-800">Portal profile</h2>
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              disabled={portalSaving}
+              onClick={handlePortalSave}
+            >
+              <Save size={13} /> {portalSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          {portalNote ? (
+            <p className="text-[11px] rounded-lg border border-emerald-100 bg-emerald-50/80 px-2.5 py-1.5 text-emerald-900">{portalNote}</p>
+          ) : null}
           <div className="flex flex-col items-center text-center">
-            <div className="w-24 h-24 rounded-2xl bg-[#006838] flex items-center justify-center text-white text-2xl font-extrabold mb-3">
-              {user?.initials || 'NP'}
+            <div className="relative inline-block mb-3">
+              <UserAvatar user={avatarUser} className="w-24 h-24 rounded-2xl" textClassName="text-2xl" />
+              <button
+                type="button"
+                title="Change profile photo"
+                disabled={portalPhotoBusy}
+                onClick={() => portalPhotoRef.current?.click()}
+                className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-[#006838] shadow-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                <UploadCloud size={16} />
+              </button>
+              <input
+                ref={portalPhotoRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePortalPhoto}
+              />
             </div>
+            {portalPhotoBusy ? <p className="text-[10px] text-slate-500 mb-1">Processing image…</p> : null}
+            {user?.profilePicture ? (
+              <button type="button" onClick={clearPortalPhoto} className="text-[10px] text-slate-500 hover:text-red-600 underline mb-2">
+                Remove photo
+              </button>
+            ) : null}
             <p className="text-sm font-bold text-slate-900">{title}</p>
             <p className="text-xs text-slate-500">{employee?.positionTitle || user?.role || 'Staff'}</p>
             <span className="badge badge-green text-[9px] mt-2">Active</span>
           </div>
-          <div className="space-y-2 mt-4">
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                <Lock size={10} /> Username
+              </label>
+              <input
+                className="np-input mt-1 w-full text-sm bg-slate-50 text-slate-600 cursor-not-allowed"
+                value={user?.username || '—'}
+                readOnly
+                title="Username cannot be changed"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Display name</label>
+              <input
+                className="np-input mt-1 w-full text-sm"
+                value={portalForm.name}
+                onChange={(e) => setPortalForm((p) => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Phone</label>
+              <input
+                className="np-input mt-1 w-full text-sm"
+                value={portalForm.phone}
+                onChange={(e) => setPortalForm((p) => ({ ...p, phone: e.target.value }))}
+                inputMode="tel"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Location</label>
+              <input
+                className="np-input mt-1 w-full text-sm"
+                value={portalForm.location}
+                onChange={(e) => setPortalForm((p) => ({ ...p, location: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Bio</label>
+              <textarea
+                className="np-input mt-1 w-full text-sm min-h-[64px]"
+                value={portalForm.bio}
+                onChange={(e) => setPortalForm((p) => ({ ...p, bio: e.target.value }))}
+                placeholder="Short introduction visible on the portal"
+              />
+            </div>
+          </div>
+          <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
             {[
               { icon: Mail, label: 'Work email', value: employee?.email || user?.email },
               { icon: Briefcase, label: 'Department', value: employee?.departmentName || user?.department },

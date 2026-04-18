@@ -101,13 +101,15 @@ export function ChatSocketProvider({ children }) {
     }
   }, [runtimeOffline, sessionPrimed, owlTalkUser?.id, user?.email])
 
-  const sendMessage = (receiverId, content, messageType = 'text') => {
+  const sendMessage = (receiverId, content, messageType = 'text', replyToId = null) => {
     if (!socket || !connected) return
-    socket.emit('send_message', {
+    const payload = {
       receiver_id: receiverId,
       content,
       message_type: messageType,
-    })
+    }
+    if (replyToId != null) payload.reply_to_id = replyToId
+    socket.emit('send_message', payload)
   }
 
   const joinChat = (otherUserId) => {

@@ -278,8 +278,13 @@ def handle_send_message(data):
         'content': content,
         'message_type': message_type,
         'timestamp': message.timestamp.isoformat(),
-        'sender_username': sender.username if sender else None
+        'sender_username': sender.username if sender else None,
+        'reply_to_id': message.reply_to_id,
     }
+    if message.reply_to_id:
+        parent = Message.query.get(message.reply_to_id)
+        if parent:
+            message_data['reply_preview'] = parent.to_reply_preview()
     
     # Send to receiver if online
     if receiver_id in active_users:

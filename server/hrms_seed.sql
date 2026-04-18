@@ -101,6 +101,83 @@ SET
   employment_status = EXCLUDED.employment_status,
   updated_at = NOW();
 
+-- Portal demo logins (emails match AuthContext DEMO_USERS for HR profile + DB sync)
+-- Clear prior portal-demo rows so re-seeding stays idempotent (FK-safe).
+UPDATE hr_leave_requests lr
+SET relief_officer_id = NULL
+WHERE lr.relief_officer_id IN (
+  SELECT id FROM hr_employees e
+  WHERE e.employee_id LIKE 'NAPTIN/P%'
+     OR LOWER(TRIM(e.email)) IN (
+       'staff@naptin.gov.ng','hod@naptin.gov.ng','director@naptin.gov.ng',
+       'ict@naptin.gov.ng','audit@naptin.gov.ng','a.okonkwo@naptin.gov.ng'
+     )
+);
+UPDATE hr_leave_requests lr
+SET reviewed_by = NULL
+WHERE lr.reviewed_by IN (
+  SELECT id FROM hr_employees e
+  WHERE e.employee_id LIKE 'NAPTIN/P%'
+     OR LOWER(TRIM(e.email)) IN (
+       'staff@naptin.gov.ng','hod@naptin.gov.ng','director@naptin.gov.ng',
+       'ict@naptin.gov.ng','audit@naptin.gov.ng','a.okonkwo@naptin.gov.ng'
+     )
+);
+UPDATE hr_performance_reviews pr
+SET reviewer_id = NULL
+WHERE pr.reviewer_id IN (
+  SELECT id FROM hr_employees e
+  WHERE e.employee_id LIKE 'NAPTIN/P%'
+     OR LOWER(TRIM(e.email)) IN (
+       'staff@naptin.gov.ng','hod@naptin.gov.ng','director@naptin.gov.ng',
+       'ict@naptin.gov.ng','audit@naptin.gov.ng','a.okonkwo@naptin.gov.ng'
+     )
+);
+DELETE FROM hr_employees e
+WHERE e.employee_id LIKE 'NAPTIN/P%'
+   OR LOWER(TRIM(e.email)) IN (
+     'staff@naptin.gov.ng','hod@naptin.gov.ng','director@naptin.gov.ng',
+     'ict@naptin.gov.ng','audit@naptin.gov.ng','a.okonkwo@naptin.gov.ng'
+   );
+
+INSERT INTO hr_employees (
+  employee_id, first_name, last_name, other_names, email, phone,
+  gender, date_of_birth, marital_status, state_of_origin, lga,
+  residential_address, department_id, position_id, grade_level, step,
+  date_of_first_appointment, date_of_current_appointment,
+  employment_type, employment_status, bank_name, bank_account_no, tax_id, pension_pin,
+  portal_username, portal_display_name, office_location
+)
+SELECT DISTINCT ON (v.employee_id)
+  v.employee_id, v.first_name, v.last_name, v.other_names, v.email, v.phone,
+  v.gender, v.date_of_birth, v.marital_status, v.state_of_origin, v.lga,
+  v.residential_address, d.id, p.id, v.grade_level, v.step,
+  v.date_of_first_appointment, v.date_of_current_appointment,
+  v.employment_type, v.employment_status, v.bank_name, v.bank_account_no, v.tax_id, v.pension_pin,
+  v.portal_username, v.portal_display_name, v.office_location
+FROM (
+  VALUES
+    ('NAPTIN/P01', 'Adebayo', 'Okonkwo', NULL, 'staff@naptin.gov.ng', '+234 803 456 7890', 'male', DATE '1985-04-12', 'married', 'Lagos', 'Ikeja', 'Corporate HQ, Abuja', 'ADMIN', 'Assistant Director', 'GL 14', 3, DATE '2010-05-01', DATE '2019-06-01', 'permanent', 'active', 'GTBank', '2012345678', 'TIN0001001', 'PEN100010001001', 'adebayo.okonkwo', 'Adebayo Okonkwo', 'Corporate HQ, Abuja'),
+    ('NAPTIN/P02', 'Grace', 'Okafor', NULL, 'hod@naptin.gov.ng', '+234 807 788 9900', 'female', DATE '1991-06-09', 'single', 'Delta', 'Asaba', '6 Nnebisi Road, Asaba', 'FIN', 'Principal Officer', 'GL 13', 2, DATE '2015-04-01', DATE '2023-04-01', 'permanent', 'active', 'Wema Bank', '3234567890', 'TIN0001002', 'PEN100010002002', 'grace.okafor', 'Grace Okafor', 'Finance HQ, Abuja'),
+    ('NAPTIN/P03', 'Biodun', 'Adeyemi', NULL, 'director@naptin.gov.ng', '+234 802 555 0101', 'male', DATE '1972-03-20', 'married', 'Ogun', 'Abeokuta', '15 Quarry Road, Abeokuta', 'TRNG', 'Director', 'GL 16', 1, DATE '1996-01-15', DATE '2018-03-01', 'permanent', 'active', 'Zenith Bank', '1023456789', 'TIN0001003', 'PEN100010003003', 'biodun.adeyemi', 'Biodun Adeyemi', 'Training Campus, Kaduna'),
+    ('NAPTIN/P04', 'Emmanuel', 'Bello', NULL, 'ict@naptin.gov.ng', '+234 805 765 4321', 'male', DATE '1988-09-01', 'married', 'Niger', 'Minna', 'ICT Block, Minna', 'ICT', 'Officer I', 'GL 10', 2, DATE '2015-04-01', DATE '2023-04-01', 'permanent', 'active', 'Access Bank', '0145678901', 'TIN0001004', 'PEN100010004004', 'emmanuel.bello', 'Emmanuel Bello', 'Lagos ICT Campus'),
+    ('NAPTIN/P05', 'Ngozi', 'Eze', 'Chioma', 'audit@naptin.gov.ng', '+234 801 133 4455', 'female', DATE '1976-04-11', 'married', 'Abia', 'Umuahia North', '12 Azikiwe Road, Umuahia', 'PROC', 'Director', 'GL 16', 1, DATE '1999-11-01', DATE '2019-05-15', 'permanent', 'active', 'Diamond Bank', '1456789012', 'TIN0001005', 'PEN100010005005', 'ngozi.eze', 'Ngozi Eze', 'Internal Audit, Abuja'),
+    ('NAPTIN/P06', 'Adebayo', 'Okonkwo', NULL, 'a.okonkwo@naptin.gov.ng', '+234 803 456 7890', 'male', DATE '1985-04-12', 'married', 'Lagos', 'Ikeja', 'Corporate HQ, Abuja', 'ADMIN', 'Assistant Director', 'GL 14', 3, DATE '2010-05-01', DATE '2019-06-01', 'permanent', 'active', 'GTBank', '2012345679', 'TIN0001006', 'PEN100010006006', 'a.okonkwo', 'Adebayo Okonkwo', 'Corporate HQ, Abuja')
+) AS v(
+  employee_id, first_name, last_name, other_names, email, phone,
+  gender, date_of_birth, marital_status, state_of_origin, lga,
+  residential_address, department_code, position_title, grade_level, step,
+  date_of_first_appointment, date_of_current_appointment,
+  employment_type, employment_status, bank_name, bank_account_no, tax_id, pension_pin,
+  portal_username, portal_display_name, office_location
+)
+JOIN hr_departments d ON d.code = v.department_code
+LEFT JOIN hr_positions p
+  ON p.department_id = d.id
+ AND p.title = v.position_title
+ AND p.grade_level = v.grade_level
+ORDER BY v.employee_id, p.id NULLS LAST;
+
 -- Department heads
 UPDATE hr_departments d
 SET head_employee_id = e.id

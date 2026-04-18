@@ -159,6 +159,10 @@ def get_messages(user_id):
         # Ensure file paths are included for attachments
         if message.file_path:
             msg_dict['file_url'] = f'/api/uploads/{message.file_path}'
+        if message.reply_to_id:
+            parent = Message.query.get(message.reply_to_id)
+            if parent and not parent.is_deleted:
+                msg_dict['reply_preview'] = parent.to_reply_preview()
         message_data.append(msg_dict)
     
     return jsonify(message_data)

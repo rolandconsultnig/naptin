@@ -5,6 +5,7 @@ import { useNotifications, relativeTime, TYPE_DOT } from '../../context/Notifica
 import { canAccessNavPath } from '../../auth/access'
 import { usePolicySync } from '../../admin/usePolicySync'
 import { NAPTIN_LOGO } from '../../assets/images'
+import { UserAvatar } from '../UserAvatar'
 import {
   LayoutDashboard, Radio, Users, Wallet, Video, MessageSquare,
   Monitor, ShoppingCart, BarChart2, GraduationCap,
@@ -176,9 +177,7 @@ export default function AppLayout() {
       {/* User footer */}
       <div className="border-t border-slate-100 p-3 flex-shrink-0">
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-slate-50 cursor-pointer group">
-          <div className="w-8 h-8 rounded-full bg-[#006838] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {user?.initials}
-          </div>
+          <UserAvatar user={user} className="w-8 h-8 rounded-full" textClassName="text-xs" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800 truncate">{user?.name}</p>
             <p className="text-[10px] text-slate-400 truncate">{user?.department ?? '—'}</p>
@@ -301,9 +300,7 @@ export default function AppLayout() {
                 onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false) }}
                 className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-slate-50 transition-colors"
               >
-                <div className="w-8 h-8 rounded-full bg-[#006838] flex items-center justify-center text-white text-xs font-bold">
-                  {user?.initials}
-                </div>
+                <UserAvatar user={user} className="w-8 h-8 rounded-full" textClassName="text-xs" />
                 <div className="hidden md:block text-left">
                   <p className="text-xs font-bold text-slate-800 leading-tight">{user?.name?.split(' ')[0]}</p>
                   <p className="text-[10px] text-slate-400">{user?.role}</p>
@@ -314,7 +311,7 @@ export default function AppLayout() {
                 <div className="absolute right-0 top-12 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-fade-in">
                   <div className="px-4 py-4 bg-[#006838]/5 border-b border-slate-100">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#006838] flex items-center justify-center text-white font-bold">{user?.initials}</div>
+                      <UserAvatar user={user} className="w-10 h-10 rounded-full" textClassName="text-sm" />
                       <div>
                         <p className="text-sm font-bold text-slate-900">{user?.name}</p>
                         <p className="text-xs text-slate-500">{user?.department}</p>

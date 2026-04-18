@@ -14,6 +14,10 @@ export const hrmsApi = {
   updateEmployee(id, payload) {
     return http.patch(`/hrms/employees/${id}`, payload).then(r => r.data)
   },
+  /** Persists portal fields on hr_employees (matched by email). Username is not updated server-side. */
+  patchMyPortalProfile(payload) {
+    return http.patch('/hrms/profile/me', payload).then((r) => r.data)
+  },
   getEmployeeDocuments(employeeId) {
     return http.get(`/hrms/employees/${employeeId}/documents`).then(r => r.data)
   },

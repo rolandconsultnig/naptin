@@ -31,9 +31,22 @@ const employeeCreateSchema = z.object({
   bankAccountNo: z.string().optional().nullable(),
   taxId: z.string().optional().nullable(),
   pensionPin: z.string().optional().nullable(),
+  profilePhotoUrl: z.string().optional().nullable(),
+  portalDisplayName: z.string().optional().nullable(),
+  portalBio: z.string().optional().nullable(),
+  officeLocation: z.string().optional().nullable(),
 })
 
 const employeeUpdateSchema = employeeCreateSchema.partial()
+
+const portalSelfSchema = z.object({
+  email: z.string().email(),
+  displayName: z.string().optional(),
+  phone: z.union([z.string(), z.null()]).optional(),
+  location: z.union([z.string(), z.null()]).optional(),
+  bio: z.string().optional(),
+  profilePhotoUrl: z.union([z.string(), z.null()]).optional(),
+})
 const employeeDocumentSchema = z.object({
   docType: z.string().min(1),
   title: z.string().min(1),
@@ -79,6 +92,10 @@ function mapEmployee(row) {
     pensionPin: row.pension_pin,
     nhfNumber: row.nhf_number,
     profilePhotoUrl: row.profile_photo_url,
+    portalDisplayName: row.portal_display_name,
+    portalBio: row.portal_bio,
+    officeLocation: row.office_location,
+    portalUsername: row.portal_username,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -99,6 +116,67 @@ function mapEmployeeDocument(row) {
 }
 
 // ─── Employees ──────────────────────────────────────────────────
+
+/** Self-service portal profile: updates hr_employees by email (username is not writable here). */
+router.patch('/profile/me', async (req, res, next) => {
+  try {
+    const data = portalSelfSchema.parse(req.body)
+    const [row] = await query(
+      `SELECT id FROM hr_employees WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))`,
+      [data.email]
+    )
+    if (!row) return res.status(404).json({ error: 'No employee record for this email' })
+
+    const sets = []
+    const params = []
+    let idx = 1
+
+    if (data.displayName !== undefined) {
+      sets.push(`portal_display_name = $${idx++}`)
+      params.push(data.displayName)
+    }
+    if (data.phone !== undefined) {
+      sets.push(`phone = $${idx++}`)
+      params.push(data.phone)
+    }
+    if (data.location !== undefined) {
+      sets.push(`office_location = $${idx++}`)
+      params.push(data.location)
+    }
+    if (data.bio !== undefined) {
+      sets.push(`portal_bio = $${idx++}`)
+      params.push(data.bio)
+    }
+    if (data.profilePhotoUrl !== undefined) {
+      sets.push(`profile_photo_url = $${idx++}`)
+      params.push(data.profilePhotoUrl)
+    }
+
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' })
+
+    sets.push('updated_at = NOW()')
+    params.push(row.id)
+
+    await query(
+      `UPDATE hr_employees SET ${sets.join(', ')} WHERE id = $${idx}`,
+      params
+    )
+
+    const [full] = await query(
+      `SELECT e.*,
+              d.name AS department_name,
+              p.title AS position_title,
+              s.first_name || ' ' || s.last_name AS supervisor_name
+       FROM hr_employees e
+       LEFT JOIN hr_departments d ON d.id = e.department_id
+       LEFT JOIN hr_positions p ON p.id = e.position_id
+       LEFT JOIN hr_employees s ON s.id = e.supervisor_id
+       WHERE e.id = $1`,
+      [row.id]
+    )
+    res.json(mapEmployee(full))
+  } catch (e) { next(e) }
+})
 
 router.get('/employees', async (req, res, next) => {
   try {
@@ -216,6 +294,10 @@ router.patch('/employees/:id', async (req, res, next) => {
       dateOfFirstAppointment: 'date_of_first_appointment', supervisorId: 'supervisor_id',
       bankName: 'bank_name', bankAccountNo: 'bank_account_no', taxId: 'tax_id',
       pensionPin: 'pension_pin',
+      profilePhotoUrl: 'profile_photo_url',
+      portalDisplayName: 'portal_display_name',
+      portalBio: 'portal_bio',
+      officeLocation: 'office_location',
     }
 
     for (const [jsKey, dbCol] of Object.entries(fieldMap)) {

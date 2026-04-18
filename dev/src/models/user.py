@@ -79,6 +79,17 @@ class Message(db.Model):
     def __repr__(self):
         return f'<Message {self.id}>'
 
+    def to_reply_preview(self):
+        """Snapshot for quoted-reply UI (photo, voice, file, text)."""
+        return {
+            'message_id': self.id,
+            'sender_id': self.sender_id,
+            'sender_username': self.sender.username if self.sender else None,
+            'message_type': self.message_type or 'text',
+            'content': self.content,
+            'file_name': self.file_name,
+        }
+
     def to_dict(self):
         return {
             'id': self.id,

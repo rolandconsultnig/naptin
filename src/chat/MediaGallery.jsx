@@ -4,7 +4,7 @@ import {
   Upload, Grid, List, Search, X, File
 } from 'lucide-react'
 import axios from 'axios'
-import { getApiBase } from './chatConfig'
+import { getApiBase, resolveChatAssetUrl } from './chatConfig'
 import toast from 'react-hot-toast'
 
 /**
@@ -254,7 +254,7 @@ export default function MediaGallery({ isOpen, onClose }) {
                   <div className="aspect-square flex items-center justify-center bg-gray-200">
                     {item.thumbnail_path ? (
                       <img
-                        src={item.thumbnail_path}
+                        src={resolveChatAssetUrl(item.thumbnail_path)}
                         alt={item.file_name}
                         className="w-full h-full object-cover"
                       />
@@ -309,7 +309,7 @@ export default function MediaGallery({ isOpen, onClose }) {
                   <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
                     {item.thumbnail_path ? (
                       <img
-                        src={item.thumbnail_path}
+                        src={resolveChatAssetUrl(item.thumbnail_path)}
                         alt={item.file_name}
                         className="w-full h-full object-cover rounded"
                       />
@@ -372,14 +372,14 @@ export default function MediaGallery({ isOpen, onClose }) {
             <div className="p-6">
               {selectedMedia.file_type === 'image' && selectedMedia.file_path && (
                 <img
-                  src={selectedMedia.file_path}
+                  src={resolveChatAssetUrl(selectedMedia.file_path)}
                   alt={selectedMedia.file_name}
                   className="max-w-full h-auto mx-auto"
                 />
               )}
               {selectedMedia.file_type === 'video' && selectedMedia.file_path && (
                 <video
-                  src={selectedMedia.file_path}
+                  src={resolveChatAssetUrl(selectedMedia.file_path)}
                   controls
                   className="max-w-full h-auto mx-auto"
                 />
@@ -387,7 +387,7 @@ export default function MediaGallery({ isOpen, onClose }) {
               {selectedMedia.file_type === 'audio' && selectedMedia.file_path && (
                 <div className="text-center py-12">
                   <Music className="h-20 w-20 mx-auto text-gray-400 mb-4" />
-                  <audio src={selectedMedia.file_path} controls className="mx-auto" />
+                  <audio src={resolveChatAssetUrl(selectedMedia.file_path)} controls className="mx-auto" />
                 </div>
               )}
               {(selectedMedia.file_type === 'document' || selectedMedia.file_type === 'other') && (

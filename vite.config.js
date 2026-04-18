@@ -10,8 +10,9 @@ const spaNavigateAllowlist = [/^\/$/, /^\/app(?:\/.*)?$/]
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const chatHttp = env.VITE_CHAT_BACKEND_PROTOCOL === 'http'
-  const chatTarget = chatHttp ? 'http://127.0.0.1:4003' : 'https://127.0.0.1:4003'
+  // Owl Talk (`python dev/main.py`) serves HTTP unless dev/ssl/*.pem exist; HTTPS proxy → HTTP backend = 502.
+  const chatUsesHttps = env.VITE_CHAT_BACKEND_PROTOCOL === 'https'
+  const chatTarget = chatUsesHttps ? 'https://127.0.0.1:4003' : 'http://127.0.0.1:4003'
   const enableChatProxy =
     mode === 'development' &&
     !env.VITE_CHAT_API_URL &&
@@ -26,6 +27,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false, // self-signed cert on dev backend
           rewrite: (path) => path.replace(/^\/proxy-chat-api/, '/api'),
+        },
+        /** Flask serves uploads under /static/... at app root (not under /api). Without this, img src via /proxy-chat-api/static/... becomes /api/static/... and 404s. */
+        '/proxy-chat-static': {
+          target: chatTarget,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/proxy-chat-static/, ''),
         },
         '/proxy-chat-socket': {
           target: chatTarget,
@@ -63,7 +71,7 @@ export default defineConfig(({ mode }) => {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: 'index.html',
         navigateFallbackAllowlist: spaNavigateAllowlist,
-        navigateFallbackDenylist: [/^\/api\//, /^\/proxy-chat-api/, /^\/proxy-chat-socket/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/proxy-chat-api/, /^\/proxy-chat-static/, /^\/proxy-chat-socket/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

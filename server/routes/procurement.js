@@ -236,12 +236,14 @@ router.get('/tenders', async (_req, res, next) => {
       `SELECT t.*,
               (SELECT COUNT(*) FROM proc_tender_bids b WHERE b.tender_id = t.id) AS bid_count
        FROM proc_tenders t
-       ORDER BY t.publish_date DESC`
+       ORDER BY t.opening_date DESC NULLS LAST`
     )
     res.json(rows.map(r => ({
       id: r.id, tenderRef: r.tender_ref, title: r.title,
-      category: r.category, publishDate: r.publish_date,
-      closingDate: r.closing_date, estimatedValue: parseFloat(r.estimated_value),
+      category: r.tender_type,
+      publishDate: r.opening_date,
+      closingDate: r.closing_date,
+      estimatedValue: parseFloat(r.budget_amount),
       status: r.status, bidCount: parseInt(r.bid_count),
       description: r.description,
     })))
@@ -265,11 +267,11 @@ router.post('/tenders', async (req, res, next) => {
 
     const [row] = await query(
       `INSERT INTO proc_tenders
-        (tender_ref, title, category, publish_date, closing_date,
-         estimated_value, description, requisition_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [ref, data.title, data.category, data.publishDate, data.closingDate,
-       data.estimatedValue, data.description, data.requisitionId]
+        (tender_ref, title, description, tender_type, opening_date, closing_date,
+         budget_amount, requisition_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'draft') RETURNING *`,
+      [ref, data.title, data.description || '', data.category, data.publishDate, data.closingDate,
+       data.estimatedValue, data.requisitionId]
     )
     res.status(201).json({ id: row.id, tenderRef: row.tender_ref })
   } catch (e) { next(e) }
@@ -282,12 +284,12 @@ router.get('/tenders/:id/bids', async (req, res, next) => {
        FROM proc_tender_bids b
        JOIN proc_vendors v ON v.id = b.vendor_id
        WHERE b.tender_id = $1
-       ORDER BY b.total_amount`,
+       ORDER BY b.bid_amount`,
       [req.params.id]
     )
     res.json(rows.map(r => ({
       id: r.id, vendorName: r.vendor_name, vendorId: r.vendor_id,
-      totalAmount: parseFloat(r.total_amount),
+      totalAmount: parseFloat(r.bid_amount),
       technicalScore: r.technical_score ? parseFloat(r.technical_score) : null,
       financialScore: r.financial_score ? parseFloat(r.financial_score) : null,
       overallScore: r.overall_score ? parseFloat(r.overall_score) : null,
@@ -307,7 +309,7 @@ router.post('/tenders/:id/bids', async (req, res, next) => {
 
     const [row] = await query(
       `INSERT INTO proc_tender_bids
-        (tender_id, vendor_id, total_amount, technical_score, financial_score)
+        (tender_id, vendor_id, bid_amount, technical_score, financial_score)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [req.params.id, data.vendorId, data.totalAmount,
        data.technicalScore, data.financialScore]
@@ -330,7 +332,7 @@ router.post('/tenders/:id/evaluate', async (req, res, next) => {
         const fin = parseFloat(bid.financial_score || 50)
         const overall = (tech * 0.6) + (fin * 0.4)
         await client.query(
-          `UPDATE proc_tender_bids SET overall_score = $1 WHERE id = $2`,
+          `UPDATE proc_tender_bids SET total_score = $1 WHERE id = $2`,
           [overall, bid.id]
         )
       }
@@ -388,21 +390,21 @@ router.get('/purchase-orders', async (req, res, next) => {
     const result = []
     for (const r of rows) {
       const items = await query(
-        `SELECT * FROM proc_po_items WHERE purchase_order_id = $1 ORDER BY item_no`,
+        `SELECT * FROM proc_po_items WHERE po_id = $1 ORDER BY id`,
         [r.id]
       )
       result.push({
         id: r.id, poNumber: r.po_number, vendorName: r.vendor_name,
         vendorId: r.vendor_id, orderDate: r.order_date,
-        deliveryDate: r.expected_delivery_date,
+        deliveryDate: r.delivery_date,
         currency: r.currency, totalAmount: parseFloat(r.total_amount),
-        status: r.status, prNumber: r.pr_number,
-        items: items.map(i => ({
-          id: i.id, itemNo: i.item_no, description: i.description,
+        status: r.status, prNumber: r.requisition_id,
+        items: items.map((i, idx) => ({
+          id: i.id, itemNo: idx + 1, description: i.item_description,
           unit: i.unit, quantity: parseInt(i.quantity),
           unitPrice: parseFloat(i.unit_price),
           total: parseFloat(i.total_price),
-          receivedQty: parseInt(i.received_quantity || 0),
+          receivedQty: parseInt(i.received_qty ?? 0),
         })),
       })
     }
@@ -432,22 +434,24 @@ router.post('/purchase-orders', async (req, res, next) => {
       const seq = Date.now().toString(36).toUpperCase()
       const poNumber = `PO-${new Date().getFullYear()}-${seq}`
 
+      const subtotal = totalAmount
+      const taxAmount = 0
       const { rows: [po] } = await client.query(
         `INSERT INTO proc_purchase_orders
-          (po_number, vendor_id, order_date, expected_delivery_date,
-           currency, total_amount, pr_number)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          (po_number, vendor_id, order_date, delivery_date,
+           currency, subtotal, tax_amount, total_amount, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'draft') RETURNING *`,
         [poNumber, data.vendorId, data.orderDate, data.expectedDeliveryDate,
-         data.currency, totalAmount, data.prNumber]
+         data.currency, subtotal, taxAmount, totalAmount]
       )
 
       for (let i = 0; i < data.items.length; i++) {
         const item = data.items[i]
         await client.query(
           `INSERT INTO proc_po_items
-            (purchase_order_id, item_no, description, unit, quantity, unit_price, total_price)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [po.id, i + 1, item.description, item.unit, item.quantity,
+            (po_id, item_description, unit, quantity, unit_price, total_price)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [po.id, item.description, item.unit, item.quantity,
            item.unitPrice, item.quantity * item.unitPrice]
         )
       }
@@ -478,15 +482,15 @@ router.get('/goods-received', async (_req, res, next) => {
     const rows = await query(
       `SELECT g.*, po.po_number, v.name AS vendor_name
        FROM proc_goods_received g
-       JOIN proc_purchase_orders po ON po.id = g.purchase_order_id
+       JOIN proc_purchase_orders po ON po.id = g.po_id
        JOIN proc_vendors v ON v.id = po.vendor_id
        ORDER BY g.received_date DESC`
     )
     res.json(rows.map(r => ({
       id: r.id, grnNumber: r.grn_number, poNumber: r.po_number,
       vendorName: r.vendor_name, receivedDate: r.received_date,
-      receivedBy: r.received_by, status: r.status,
-      remarks: r.remarks,
+      receivedBy: r.received_by, status: r.inspection_status,
+      remarks: r.notes,
     })))
   } catch (e) { next(e) }
 })
@@ -513,7 +517,7 @@ router.post('/goods-received', async (req, res, next) => {
 
       const { rows: [grn] } = await client.query(
         `INSERT INTO proc_goods_received
-          (grn_number, purchase_order_id, received_date, received_by, remarks)
+          (grn_number, po_id, received_date, received_by, notes)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
         [grnNumber, data.purchaseOrderId, data.receivedDate,
          data.receivedBy, data.remarks]
@@ -522,26 +526,24 @@ router.post('/goods-received', async (req, res, next) => {
       for (const item of data.items) {
         await client.query(
           `INSERT INTO proc_grn_items
-            (grn_id, po_item_id, received_quantity, accepted_quantity,
-             rejected_quantity, remarks)
+            (grn_id, po_item_id, quantity_received, quantity_accepted,
+             quantity_rejected, rejection_reason)
            VALUES ($1,$2,$3,$4,$5,$6)`,
           [grn.id, item.poItemId, item.receivedQuantity,
-           item.acceptedQuantity, item.rejectedQuantity, item.remarks]
+           item.acceptedQuantity, item.rejectedQuantity, item.remarks || null]
         )
 
-        // Update PO item received quantity
         await client.query(
           `UPDATE proc_po_items
-           SET received_quantity = COALESCE(received_quantity, 0) + $1
+           SET received_qty = COALESCE(received_qty, 0) + $1
            WHERE id = $2`,
           [item.acceptedQuantity, item.poItemId]
         )
       }
 
-      // Check if PO is fully received
       const { rows: poItems } = await client.query(
-        `SELECT quantity, COALESCE(received_quantity, 0) AS received
-         FROM proc_po_items WHERE purchase_order_id = $1`,
+        `SELECT quantity, COALESCE(received_qty, 0) AS received
+         FROM proc_po_items WHERE po_id = $1`,
         [data.purchaseOrderId]
       )
       const allReceived = poItems.every(i => parseInt(i.received) >= parseInt(i.quantity))

@@ -61,6 +61,10 @@ CREATE TABLE IF NOT EXISTS hr_employees (
   pension_pin TEXT,
   nhf_number TEXT,
   profile_photo_url TEXT,
+  portal_display_name TEXT,
+  portal_bio TEXT,
+  office_location TEXT,
+  portal_username TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
