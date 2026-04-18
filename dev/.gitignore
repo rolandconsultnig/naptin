@@ -19,6 +19,11 @@ build/
 # Flask
 instance/
 .webassets-cache
+flask_session/
+
+# Local chat uploads (do not commit user media)
+static/uploads/*
+!static/uploads/.gitkeep
 
 # Database
 *.db

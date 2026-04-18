@@ -40,3 +40,9 @@ flask_session/
 
 # Local profile uploads (portal)
 uploads/profiles/
+
+# Postgres dumps (use `git add -f` only on private repos after review)
+database/exports/*.sql
+database/exports/*.sql.gz
+!database/exports/.gitkeep
+!database/exports/README.md
