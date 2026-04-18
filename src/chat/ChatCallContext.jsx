@@ -52,6 +52,47 @@ function createIceServers() {
 
 const ICE_SERVERS = createIceServers()
 
+function isBrowserLocalhost() {
+  const h = window.location.hostname
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]'
+}
+
+function callMediaSupportCheck() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: 'Camera/microphone access is not supported in this browser.',
+    }
+  }
+
+  const secure = window.isSecureContext || isBrowserLocalhost()
+  if (secure) return { ok: true }
+
+  const canRedirectToHttps = window.location.protocol === 'http:' && !isBrowserLocalhost()
+  return {
+    ok: false,
+    reason: canRedirectToHttps ? 'needs_https_redirect' : 'insecure_context',
+    message: canRedirectToHttps
+      ? 'Calls need HTTPS. Redirecting to secure chat…'
+      : 'Calls need a secure context (HTTPS or localhost).',
+  }
+}
+
+function redirectToHttpsForCall() {
+  try {
+    const url = new URL(window.location.href)
+    if (url.protocol === 'http:') {
+      url.protocol = 'https:'
+      window.location.replace(url.toString())
+      return true
+    }
+  } catch {
+    // no-op
+  }
+  return false
+}
+
 export function ChatCallProvider({ children }) {
   const { socket, connected } = useChatSocket()
   const { user } = useAuth()
@@ -489,11 +530,16 @@ export function ChatCallProvider({ children }) {
 
     try {
       ccLog(`📞 Starting ${callType} call to user ${receiverId}`)
-      
-      // Check if mediaDevices is available
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('getUserMedia is not available')
-        toast.error('Camera/microphone access is not supported in this browser. Please use HTTPS or localhost.')
+
+      const mediaCheck = callMediaSupportCheck()
+      if (!mediaCheck.ok) {
+        console.error('Call media check failed:', mediaCheck.reason)
+        toast.error(mediaCheck.message)
+        if (mediaCheck.reason === 'needs_https_redirect') {
+          setTimeout(() => {
+            redirectToHttpsForCall()
+          }, 250)
+        }
         return
       }
       
@@ -548,10 +594,15 @@ export function ChatCallProvider({ children }) {
       otherUserIdRef.current = callData.caller_id
       socket.emit('call_accept', { call_id: callData.call_id })
 
-      // Check if mediaDevices is available
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('getUserMedia is not available')
-        toast.error('Camera/microphone access is not supported in this browser.')
+      const mediaCheck = callMediaSupportCheck()
+      if (!mediaCheck.ok) {
+        console.error('Call media check failed:', mediaCheck.reason)
+        toast.error(mediaCheck.message)
+        if (mediaCheck.reason === 'needs_https_redirect') {
+          setTimeout(() => {
+            redirectToHttpsForCall()
+          }, 250)
+        }
         rejectCall()
         return
       }
