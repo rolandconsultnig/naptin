@@ -409,6 +409,32 @@ pm2 save
 
 Allow **22**, **80**, **443** only. **PostgreSQL 5432**, **4001–4003** stay internal.
 
+If browsers hit **`http://SERVER:4001`** (vite preview) and **`http://SERVER:4003`** (Owl) **directly**, open **4001**, **4002**, and **4003** on the cloud **security group** and **`ufw`** — otherwise you will see **`net::ERR_CONNECTION_REFUSED`**.
+
+---
+
+## 10. Troubleshooting
+
+### `GET http://SERVER:4003/... net::ERR_CONNECTION_REFUSED`
+
+Owl Talk is not accepting connections (or the port is blocked).
+
+1. On the server: `pm2 logs naptin-chat --lines 80` — fix **venv** (`dev/venv`, `pip install -r dev/requirements.txt`), **`.env`** / DB, or Python tracebacks until the app stays **online**.
+2. `ss -tlnp | grep 4003` — you should see a listener on **`0.0.0.0:4003`** (or similar).
+3. From your laptop: `curl -sS http://SERVER:4003/health` — must return JSON, not timeout.
+4. **AWS:** security group inbound **TCP 4003** (same for **4001** / **4002** if you use them from the browser).
+
+Chat login (`/api/login`, `/api/me` on port **4003**) is **Owl Talk**. The workbench API is on **4002** under **`/api/v1/`** — different service.
+
+### `manifest.webmanifest` — “Line 1, column 1, Syntax error”
+
+The browser received **HTML** (often `index.html`) instead of JSON. Typical causes:
+
+- **Nginx** `try_files` sends the SPA shell for unknown URLs — use the explicit `location = /manifest.webmanifest` block in **`deploy/nginx-site.example.conf`** (and reload Nginx).
+- **Stale service worker:** DevTools → Application → Service Workers → unregister, hard refresh.
+
+Diagnostic (server): `chmod +x deploy/check-server-health.sh && ./deploy/check-server-health.sh`
+
 ---
 
 ## Files in this folder
@@ -419,3 +445,4 @@ Allow **22**, **80**, **443** only. **PostgreSQL 5432**, **4001–4003** stay in
 | `env.production.example` | Copy to `/opt/naptin/.env` and edit |
 | `nginx-site.example.conf` | Nginx template for SPA + API + chat |
 | `pm2.ecosystem.config.cjs` | PM2: **naptin-web** (4001), **naptin-api** (4002), **naptin-chat** (4003) |
+| `check-server-health.sh` | Quick checks for ports 4001–4003 + manifest first byte |
