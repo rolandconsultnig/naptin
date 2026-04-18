@@ -78,6 +78,15 @@ function stableReplyToId(msg) {
   return n
 }
 
+function previewTextForMessage(msg) {
+  const messageType = msg?.message_type || 'text'
+  if (messageType === 'image') return 'Photo'
+  if (messageType === 'audio' || messageType === 'voice') return 'Voice message'
+  if (messageType === 'file') return msg?.file_name || 'File attachment'
+  const text = String(msg?.content || '').trim()
+  return text || 'New message'
+}
+
 /** Quoted original shown above the reply (composer + bubbles). */
 function ChatReplyQuoteBar({ preview, compact }) {
   if (!preview) return null
@@ -181,6 +190,7 @@ export function OwlChatApp() {
   const [messageSearchTerm, setMessageSearchTerm] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [messageStatus, setMessageStatus] = useState({}) // Track message delivery/read status
+  const [unreadByContact, setUnreadByContact] = useState({})
   const [typingTimeout, setTypingTimeout] = useState(null)
   const [replyingTo, setReplyingTo] = useState(null) // Message being replied to
   const [forwardingFrom, setForwardingFrom] = useState(null) // Message being forwarded
@@ -315,20 +325,54 @@ export function OwlChatApp() {
 
     socket.on('receive_message', (message) => {
       console.log('📩 Received message:', message)
+      const incomingSenderId = message.sender_id
+      const isCurrentChat = !!selectedChat && sameChatUser(selectedChat.id, incomingSenderId)
+
       setMessages((prev) => {
         const exists = prev.some((m) => idsEqual(m.id, message.id))
         if (exists) return prev
         return [...prev, message]
       })
+
+      setUsers((prev) => {
+        const preview = previewTextForMessage(message)
+        const stamp = new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        const hasSender = prev.some((u) => sameChatUser(u.id, incomingSenderId))
+        if (!hasSender) {
+          return [
+            {
+              id: incomingSenderId,
+              username: message.sender_username || `User ${incomingSenderId}`,
+              status: 'online',
+              lastMessage: preview,
+              time: stamp,
+              avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(message.sender_username || `User ${incomingSenderId}`)}&background=random`,
+            },
+            ...prev,
+          ]
+        }
+        return prev.map((u) =>
+          sameChatUser(u.id, incomingSenderId)
+            ? { ...u, lastMessage: preview, time: stamp }
+            : u
+        )
+      })
+
+      if (!isCurrentChat) {
+        setUnreadByContact((prev) => ({
+          ...prev,
+          [incomingSenderId]: (prev[incomingSenderId] || 0) + 1,
+        }))
+      }
       
       // Initialize status for new messages - they start as unread
       setMessageStatus(prev => ({
         ...prev,
-        [message.id]: { delivered: false, read: false }
+        [message.id]: { delivered: false, read: isCurrentChat }
       }))
       
       // Only show notification if message is not from current chat
-      if (!selectedChat || !sameChatUser(selectedChat.id, message.sender_id)) {
+      if (!isCurrentChat) {
         // Play notification sound
         notify('message')
         
@@ -348,6 +392,7 @@ export function OwlChatApp() {
     
     socket.on('message_sent', (message) => {
       console.log('✅ Message confirmed sent:', message)
+      const partnerId = sameChatUser(message.sender_id, owlUser.id) ? message.receiver_id : message.sender_id
       setMessages((prev) => {
         // Replace temporary messages (those with timestamp IDs) with the real message
         const updatedMessages = prev.map((m) =>
@@ -374,6 +419,16 @@ export function OwlChatApp() {
           updatedMessages.push(message)
         }
         return updatedMessages
+      })
+
+      setUsers((prev) => {
+        const preview = previewTextForMessage(message)
+        const stamp = new Date(message.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        return prev.map((u) =>
+          sameChatUser(u.id, partnerId)
+            ? { ...u, lastMessage: preview, time: stamp }
+            : u
+        )
       })
       
       // Update status to sent
@@ -717,6 +772,7 @@ export function OwlChatApp() {
   const handleChatSelect = async (chatUser) => {
     setSelectedChat(chatUser)
     setMessages([])
+    setUnreadByContact((prev) => ({ ...prev, [chatUser.id]: 0 }))
     joinChat(chatUser.id)
 
     if (isChatForcedOffline()) {
@@ -789,6 +845,10 @@ export function OwlChatApp() {
         } catch (err) {
           console.error('Failed to mark message as read:', err)
         }
+      }
+
+      if (unreadMessages.length > 0) {
+        setUnreadByContact((prev) => ({ ...prev, [chatUser.id]: 0 }))
       }
     } catch (error) {
       console.error('Failed to load messages:', error)
@@ -1078,41 +1138,51 @@ export function OwlChatApp() {
 
         {/* Chat List */}
         <div className="flex-1 overflow-y-auto">
-          {filteredUsers.map((u) => (
-            <div
-              key={u.id}
-              onClick={() => handleChatSelect(u)}
-              className={`chat-item ${selectedChat?.id === u.id ? 'chat-item-active' : ''}`}
-            >
-              <img
-                src={u.avatar || `https://ui-avatars.com/api/?name=${u.username}&background=00a884`}
-                alt={u.username}
-                className="w-12 h-12 rounded-full flex-shrink-0"
-                onError={(e) => {
-                  e.target.src = `https://ui-avatars.com/api/?name=${u.username}&background=00a884`
-                }}
-              />
-              <div className="ml-3 flex-1 min-w-0 relative">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-gray-900 truncate">{u.username}</h3>
-                  <span className="text-xs text-gray-500 ml-2">{u.time}</span>
+          {filteredUsers.map((u) => {
+            const unreadCount = unreadByContact[u.id] || 0
+            return (
+              <div
+                key={u.id}
+                onClick={() => handleChatSelect(u)}
+                className={`chat-item ${selectedChat?.id === u.id ? 'chat-item-active' : ''}`}
+              >
+                <img
+                  src={u.avatar || `https://ui-avatars.com/api/?name=${u.username}&background=00a884`}
+                  alt={u.username}
+                  className="w-12 h-12 rounded-full flex-shrink-0"
+                  onError={(e) => {
+                    e.target.src = `https://ui-avatars.com/api/?name=${u.username}&background=00a884`
+                  }}
+                />
+                <div className="ml-3 flex-1 min-w-0 relative">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900 truncate">{u.username}</h3>
+                    <div className="flex items-center gap-1.5 ml-2">
+                      <span className="text-xs text-gray-500">{u.time}</span>
+                      {unreadCount > 0 && (
+                        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#25d366] text-white text-[10px] leading-[18px] text-center font-semibold">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-sm text-gray-600 truncate">
+                      {typingUsers[u.id] ? (
+                        <span className="text-blue-600 italic">typing...</span>
+                      ) : (
+                        u.lastMessage
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-sm text-gray-600 truncate">
-                    {typingUsers[u.id] ? (
-                      <span className="text-blue-600 italic">typing...</span>
-                    ) : (
-                      u.lastMessage
-                    )}
-                  </p>
-                </div>
+                {/* Online status indicator */}
+                {u.status === 'online' && (
+                  <div className="absolute bottom-3 left-10 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                )}
               </div>
-              {/* Online status indicator */}
-              {u.status === 'online' && (
-                <div className="absolute bottom-3 left-10 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
