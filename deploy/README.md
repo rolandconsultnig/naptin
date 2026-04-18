@@ -6,6 +6,8 @@ Deploy from the GitHub repo into a **dedicated folder** on the server. PostgreSQ
 
 **Example server IP:** `13.53.33.63` (replace with yours.)
 
+**Repository root:** Commands below use **`/opt/naptin`** as the folder that contains `package.json` (clone with `git clone <repo> .` into an empty `/opt/naptin`). If you instead cloned into a **subfolder** (e.g. `git clone <repo> app` then `cd app`), prefix paths with **`/opt/naptin/app`** instead of **`/opt/naptin`**.
+
 ---
 
 ## Port map (this application)
@@ -52,8 +54,7 @@ sudo apt install -y certbot python3-certbot-nginx
 sudo mkdir -p /opt/naptin
 sudo chown $USER:$USER /opt/naptin
 cd /opt/naptin
-git clone https://github.com/rolandconsultnig/naptin.git app
-cd app
+git clone https://github.com/rolandconsultnig/naptin.git .
 npm ci
 ```
 
@@ -91,7 +92,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO naptin_app;
 ### Step 4 — Create the `.env` file
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 cp deploy/env.production.example .env
 chmod 600 .env
 nano .env
@@ -110,26 +111,25 @@ If the password contains `@`, `#`, `/`, etc., you must [URL-encode](https://en.w
 Check that the line exists before continuing:
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 grep '^DATABASE_URL=' .env
 ```
 
 ### Step 5 — Build the website and load database tables
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 npm run build
-npm run db:schema
-npm run db:seed
-npm run db:rbac:schema
-npm run db:rbac:seed
+# Full schema + seeds in one go (recommended for first deploy):
+npm run db:all
+# Or run individual steps: npm run db:schema && npm run db:seed && …
 ```
 
 **If you see `password authentication failed for user "postgres"`:**  
 The app is **not** reading your `.env`, or `DATABASE_URL` still points at user `postgres`. Fix:
 
-1. Confirm the file path: **`/opt/naptin/app/.env`** (same folder as `package.json`).
-2. Run `grep DATABASE_URL /opt/naptin/app/.env` — it must use **`naptin_app`** and the **exact** password from Step 3.
+1. Confirm the file path: **`/opt/naptin/.env`** (same folder as `package.json`).
+2. Run `grep DATABASE_URL /opt/naptin/.env` — it must use **`naptin_app`** and the **exact** password from Step 3.
 3. No quotes around the URL unless your tooling requires them; avoid spaces around `=`.
 4. Test a manual connection:  
    `psql "postgresql://naptin_app:your-strong-password@127.0.0.1:5432/naptin_portal" -c 'SELECT 1'`  
@@ -140,7 +140,7 @@ The app is **not** reading your `.env`, or `DATABASE_URL` still points at user `
 The portal **Messages** screen needs Owl Talk running. Without it, the browser shows “Connecting…” and WebSocket errors to `:4003`.
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 sudo apt install -y python3 python3-pip python3-venv
 cd dev
 python3 -m venv venv
@@ -154,7 +154,7 @@ cd ..
 ### Step 6 — Start web + API + chat with PM2
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 pm2 start deploy/pm2.ecosystem.config.cjs
 pm2 save
 ```
@@ -192,7 +192,7 @@ You should see JSON like `"status": "healthy"`. If **`naptin-chat`** crashes, ru
 Edit the site file (use your domain in the file):
 
 ```bash
-sudo cp /opt/naptin/app/deploy/nginx-site.example.conf /etc/nginx/sites-available/naptin
+sudo cp /opt/naptin/deploy/nginx-site.example.conf /etc/nginx/sites-available/naptin
 sudo nano /etc/nginx/sites-available/naptin
 ```
 
@@ -219,7 +219,7 @@ sudo certbot --nginx -d portal.example.com
 Only if you need the Python chat backend. This is more advanced; skip if unsure.
 
 ```bash
-cd /opt/naptin/app/dev
+cd /opt/naptin/dev
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -230,7 +230,7 @@ If `requirements.txt` is missing, install what `dev/README.md` says, then run `m
 ### Step 10 — (Optional) Quick test of built files on port 4001
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 npx vite preview --host 127.0.0.1 --port 4001
 ```
 
@@ -239,11 +239,12 @@ Open another SSH session and run `curl http://127.0.0.1:4001` — this is only f
 ### Later — How to update the app
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 git pull
 npm ci
 npm run build
-pm2 restart naptin-api
+pm2 restart naptin-web naptin-api naptin-chat
+pm2 save
 ```
 
 ---
@@ -256,12 +257,11 @@ Use a single app root (adjust user/group to your policy):
 sudo mkdir -p /opt/naptin
 sudo chown $USER:$USER /opt/naptin
 cd /opt/naptin
-git clone https://github.com/rolandconsultnig/naptin.git app
-cd app
+git clone https://github.com/rolandconsultnig/naptin.git .
 npm ci
 ```
 
-All commands below assume **`/opt/naptin/app`** as the working copy.
+All commands below assume **`/opt/naptin`** as the working copy (same folder as `package.json`).
 
 ---
 
@@ -292,7 +292,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO naptin_app;
 
 ## 3. Environment file
 
-Create **`/opt/naptin/app/.env`** (mode `600`):
+Create **`/opt/naptin/.env`** (mode `600`):
 
 ```env
 # PostgreSQL (existing instance, local socket or 127.0.0.1)
@@ -314,11 +314,11 @@ Replace `portal.example.com` with your real hostname (DNS A → server IP).
 **Build** (embeds `VITE_*`):
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 npm run build
 ```
 
-**Migrations / seed** (`.env` must exist in `app/`; `db:apply` loads it via `dotenv`):
+**Migrations / seed** (`.env` must exist in the **repository root** next to `package.json`; `db:apply` loads it via `dotenv`):
 
 ```bash
 npm run db:schema
@@ -334,7 +334,7 @@ npm run db:rbac:seed
 Copy `deploy/nginx-site.example.conf`, edit `server_name` and SSL paths, then:
 
 ```bash
-sudo cp /opt/naptin/app/deploy/nginx-site.example.conf /etc/nginx/sites-available/naptin
+sudo cp /opt/naptin/deploy/nginx-site.example.conf /etc/nginx/sites-available/naptin
 sudo ln -sf /etc/nginx/sites-available/naptin /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d portal.example.com
@@ -347,7 +347,7 @@ sudo certbot --nginx -d portal.example.com
 ## 5. Process manager — Node API on 4002
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 pm2 start deploy/pm2.ecosystem.config.cjs
 pm2 save
 sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp $HOME
@@ -367,7 +367,7 @@ curl -sS http://127.0.0.1:4002/api/v1/health
 Python venv, bind to localhost in **production** (use a systemd unit or PM2 `interpreter`).
 
 ```bash
-cd /opt/naptin/app/dev
+cd /opt/naptin/dev
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt   # if present; else install flask, flask-socketio, etc. per dev/README
@@ -384,7 +384,7 @@ Ensure `dev/main.py` uses port **4003** (default in this repo). For production, 
 Only for local verification on the server:
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 npx vite preview --host 127.0.0.1 --port 4001
 ```
 
@@ -395,11 +395,12 @@ Then `curl http://127.0.0.1:4001` — not for public use; use Nginx + `dist/` fo
 ## 8. Updates
 
 ```bash
-cd /opt/naptin/app
+cd /opt/naptin
 git pull
 npm ci
 npm run build
-pm2 restart naptin-api
+pm2 restart naptin-web naptin-api naptin-chat
+pm2 save
 ```
 
 ---
@@ -415,6 +416,6 @@ Allow **22**, **80**, **443** only. **PostgreSQL 5432**, **4001–4003** stay in
 | File | Purpose |
 |------|---------|
 | `README.md` | This guide |
-| `env.production.example` | Copy to `/opt/naptin/app/.env` and edit |
+| `env.production.example` | Copy to `/opt/naptin/.env` and edit |
 | `nginx-site.example.conf` | Nginx template for SPA + API + chat |
-| `pm2.ecosystem.config.cjs` | PM2 entry for `server/index.js` on port 4002 |
+| `pm2.ecosystem.config.cjs` | PM2: **naptin-web** (4001), **naptin-api** (4002), **naptin-chat** (4003) |

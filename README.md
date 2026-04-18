@@ -286,7 +286,7 @@ export const ENGR_PHOTO = '/engr.png'
 
 ## Deployment
 
-**Ubuntu / Nginx / PM2 / ports 4001–4003:** see **`deploy/README.md`** (clone to e.g. `/opt/naptin/app` from [GitHub](https://github.com/rolandconsultnig/naptin)).
+**Ubuntu / Nginx / PM2 / ports 4001–4003:** see **`deploy/README.md`** (typical clone root: `/opt/naptin` — [GitHub](https://github.com/rolandconsultnig/naptin)).
 
 ```bash
 # Build

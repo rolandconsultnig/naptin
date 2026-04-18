@@ -24,6 +24,32 @@ function isLocalDevHost() {
   return h === 'localhost' || h === '127.0.0.1' || h === '[::1]'
 }
 
+/**
+ * Host the browser uses to reach the SPA; if `location.hostname` is empty (rare),
+ * derive from baked-in `VITE_*` so we never build `http://:4003/...`.
+ */
+function browserVisibleHost() {
+  if (typeof window !== 'undefined') {
+    const h = (window.location.hostname || '').trim()
+    if (h) return h
+  }
+  const fromUrl = (raw) => {
+    if (raw == null) return ''
+    const s = String(raw).trim()
+    if (!s) return ''
+    try {
+      return (new URL(s).hostname || '').trim()
+    } catch {
+      return ''
+    }
+  }
+  const fromChat = fromUrl(import.meta.env.VITE_CHAT_API_URL)
+  if (fromChat) return fromChat
+  const fromBench = fromUrl(import.meta.env.VITE_WORKBENCH_API_URL)
+  if (fromBench) return fromBench
+  return '127.0.0.1'
+}
+
 /** Dev server proxies to 127.0.0.1:4003 (`vite.config.js`). */
 export function usesChatViteProxy() {
   if (!import.meta.env.DEV) return false
@@ -51,8 +77,9 @@ export function getSocketIoClientOptions() {
 
 /** When UI is on :4001 (vite preview) or another port, chat still runs on :4003 unless Nginx same-origin — then set VITE_CHAT_* */
 function publicChatOrigin() {
-  const hostname = window.location.hostname
-  const protocol = window.location.protocol || 'http:'
+  const hostname = browserVisibleHost()
+  const protocol =
+    typeof window !== 'undefined' && window.location?.protocol ? window.location.protocol : 'http:'
   return `${protocol}//${hostname}:4003`
 }
 
@@ -68,7 +95,7 @@ export function getApiBase() {
     return `${publicChatOrigin()}/api`
   }
 
-  const hostname = window.location.hostname
+  const hostname = browserVisibleHost()
   const protocol = chatBackendProtocol()
   return `${protocol}//${hostname}:4003/api`
 }
@@ -85,7 +112,7 @@ export function getSocketUrl() {
     return publicChatOrigin()
   }
 
-  const hostname = window.location.hostname
+  const hostname = browserVisibleHost()
   const protocol = chatBackendProtocol()
   return `${protocol}//${hostname}:4003`
 }
@@ -146,7 +173,7 @@ export function resolveChatAssetUrl(pathOrUrl) {
   if (usesChatViteProxy()) {
     return `${window.location.origin}/proxy-chat-static${s}`
   }
-  const hostname = window.location.hostname
+  const hostname = browserVisibleHost()
   const protocol = chatBackendProtocol()
   return `${protocol}//${hostname}:4003${s}`
 }
