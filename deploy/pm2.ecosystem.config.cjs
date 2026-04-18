@@ -5,7 +5,7 @@
  * naptin-api  → workbench API on 4002 — reads .env (DATABASE_URL, API_PORT)
  * naptin-chat → Owl Talk (Python `dev/main.py`) on 4003 — create `dev/venv` and `pip install -r dev/requirements.txt` first
  *
- * Browser: http://YOUR_SERVER:4001 — open 4001 + 4002 + 4003 on firewall if the browser hits them directly
+ * Browser: http://YOUR_SERVER:4001 — PM2 runs `npm run preview` (see package.json); open firewall for 4001–4003 if browsers hit ports directly
  */
 const path = require('path')
 const root = path.join(__dirname, '..')
@@ -19,9 +19,9 @@ module.exports = {
     {
       name: 'naptin-web',
       cwd: root,
-      script: './node_modules/vite/bin/vite.js',
-      args: 'preview --host 0.0.0.0 --port 4001',
-      interpreter: 'node',
+      // Use npm script (see package.json "preview") — avoids PM2 mishandling vite.js path + interpreter on some setups
+      script: 'npm',
+      args: 'run preview',
       instances: 1,
       exec_mode: 'fork',
       env: { NODE_ENV: 'production' },
