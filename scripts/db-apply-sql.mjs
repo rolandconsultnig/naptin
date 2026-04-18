@@ -23,9 +23,10 @@ if (!sql.trim()) {
 
 if (!process.env.DATABASE_URL?.trim()) {
   console.error('DATABASE_URL is not set.')
-  console.error('Create /opt/naptin/app/.env (or copy .env.example) with:')
-  console.error('  DATABASE_URL=postgresql://naptin_app:YOUR_PASSWORD@127.0.0.1:5432/naptin_portal')
-  console.error('Use the same user/password you created in PostgreSQL — not necessarily user "postgres".')
+  console.error('Create a file named .env in the repository root (next to package.json), not under server/.')
+  console.error('Example:')
+  console.error('  DATABASE_URL=postgresql://naptin_app:YOUR_PASSWORD@127.0.0.1:5432/naptin_db')
+  console.error('Then run npm from that same directory: cd /path/to/repo && npm run db:all')
   process.exit(1)
 }
 
