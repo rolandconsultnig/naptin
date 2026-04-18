@@ -25,6 +25,26 @@ function isLocalDevHost() {
 }
 
 /**
+ * `.env` on the server often sets VITE_CHAT_* to http://127.0.0.1:4003 — that bakes into the SPA.
+ * From a **public** page (e.g. http://13.x.x.x:4001) the browser blocks calls to loopback (Private Network Access).
+ * Rewrite loopback → current page hostname so the browser hits the same machine's Owl on the public interface.
+ */
+function rewriteLoopbackChatBaseUrl(url) {
+  const s = String(url || '').trim().replace(/\/$/, '')
+  if (!s || typeof window === 'undefined') return s
+  if (isLocalDevHost()) return s
+  try {
+    const u = new URL(s)
+    const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)
+    if (!loopback) return s
+    u.hostname = window.location.hostname
+    return u.toString().replace(/\/$/, '')
+  } catch {
+    return s
+  }
+}
+
+/**
  * Host the browser uses to reach the SPA; if `location.hostname` is empty (rare),
  * derive from baked-in `VITE_*` so we never build `http://:4003/...`.
  */
@@ -47,7 +67,9 @@ function browserVisibleHost() {
   if (fromChat) return fromChat
   const fromBench = fromUrl(import.meta.env.VITE_WORKBENCH_API_URL)
   if (fromBench) return fromBench
-  return '127.0.0.1'
+  return typeof window !== 'undefined' && window.location?.hostname
+    ? window.location.hostname
+    : '127.0.0.1'
 }
 
 /** Dev server proxies to 127.0.0.1:4003 (`vite.config.js`). */
@@ -90,7 +112,7 @@ function publicChatOrigin() {
 
 export function getApiBase() {
   const fromEnv = import.meta.env.VITE_CHAT_API_URL
-  if (fromEnv) return String(fromEnv).replace(/\/$/, '')
+  if (fromEnv) return rewriteLoopbackChatBaseUrl(String(fromEnv).replace(/\/$/, ''))
 
   if (usesChatViteProxy()) {
     return `${window.location.origin}/proxy-chat-api`
@@ -107,7 +129,7 @@ export function getApiBase() {
 
 export function getSocketUrl() {
   const fromEnv = import.meta.env.VITE_CHAT_SOCKET_URL
-  if (fromEnv) return String(fromEnv).replace(/\/$/, '')
+  if (fromEnv) return rewriteLoopbackChatBaseUrl(String(fromEnv).replace(/\/$/, ''))
 
   if (usesChatViteProxy()) {
     return window.location.origin
