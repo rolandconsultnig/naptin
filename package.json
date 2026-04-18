@@ -39,6 +39,7 @@
     "mobile:apk:release": "npm run mobile:sync && node scripts/android-assemble.mjs release",
     "mobile:ios": "npm run mobile:sync && npx cap open ios",
     "chat": "python dev/main.py",
+    "owl:bootstrap-roster": "python dev/scripts/owl_bootstrap_demo_roster.py",
     "native:start": "npm --prefix native run start",
     "native:android": "npm --prefix native run android",
     "native:run:android": "npm --prefix native run run:android",

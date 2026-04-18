@@ -415,6 +415,17 @@ If browsers hit **`http://SERVER:4001`** (vite preview) and **`http://SERVER:400
 
 ## 10. Troubleshooting
 
+### Chat shows “no contacts” / directory preview only
+
+Owl **`GET /api/users`** returns an empty list when you are the **only** `user` row, or before demo peers exist. From repo root (Python venv as for Owl):
+
+```bash
+npm run owl:bootstrap-roster
+# or: ./dev/venv/bin/python dev/scripts/owl_bootstrap_demo_roster.py
+```
+
+Then refresh the portal. Uses the same passwords as the SPA auto-login (`naptin-*` hash per email).
+
 ### `curl http://127.0.0.1:4003/health` → **Connection reset by peer**
 
 The repo includes **`dev/ssl/cert.pem`** + **`key.pem`**. With those files present, Owl starts **HTTPS-only** on 4003. Plain **`http://`** requests then fail (often “connection reset”). Use **`curl -vk https://127.0.0.1:4003/health`**, **or** set **`OWL_TALK_DISABLE_SSL=1`** so Owl serves **HTTP** (PM2 **`deploy/pm2.ecosystem.config.cjs`** sets this for **`naptin-chat`**), then **`pm2 restart naptin-chat`**.

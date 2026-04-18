@@ -216,10 +216,10 @@ export function OwlChatApp() {
       return
     }
 
-    const myChatId = owlTalkUser?.id ?? user?.chatUserId ?? 1
-
     const loadUsers = async () => {
       const ot = await ensureOwlTalkSession(user)
+      // Never use portal `chatUserId` (900001…) for Owl roster — those are not PostgreSQL user.id values.
+      const myChatId = ot.user?.id ?? owlTalkUser?.id
       if (!ot.ok) {
         setUsers(buildStaffChatList())
         if (!usersLoadWarnedRef.current) {
@@ -247,11 +247,16 @@ export function OwlChatApp() {
             time: new Date(u.last_seen || u.created_at).toLocaleTimeString(),
             avatar: u.profile_picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=random`,
           }))
-          .filter((u) => !sameChatUser(u.id, myChatId))
+          .filter((u) => (myChatId == null ? true : !sameChatUser(u.id, myChatId)))
 
         if (usersList.length === 0) {
           setUsers(buildStaffChatList())
-          toast('Chat server returned no contacts — showing NAPTIN directory preview.', { icon: '👥' })
+          toast(
+            raw.length === 0
+              ? 'No other Owl Talk users in the database yet. On the server run: npm run owl:bootstrap-roster (then refresh). Showing directory preview.'
+              : 'Chat server returned no contacts after filtering — showing NAPTIN directory preview.',
+            { icon: '👥', duration: 8000 }
+          )
           return
         }
         usersLoadWarnedRef.current = false
