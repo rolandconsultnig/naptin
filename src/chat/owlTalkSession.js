@@ -1,6 +1,21 @@
 import axios from 'axios'
 import { getApiBase } from './chatConfig'
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function samePortalIdentity(owlUser, portalUser) {
+  const portalEmail = normalizeEmail(portalUser?.email)
+  if (!portalEmail) return true
+
+  const owlEmail = normalizeEmail(owlUser?.email)
+  if (owlEmail) return owlEmail === portalEmail
+
+  const portalLocal = portalEmail.split('@')[0]
+  return String(owlUser?.username || '').trim().toLowerCase() === portalLocal
+}
+
 /**
  * Ensure the browser has a valid Owl Talk Flask session (cookie) before opening Socket.IO.
  * Returns the chat backend user row (includes real numeric `id` from PostgreSQL).
@@ -12,7 +27,16 @@ export async function ensureOwlTalkSession(portalUser, options = {}) {
 
   try {
     const me = await axios.get(`${base}/me`, cfg)
-    if (me.data?.user) return { ok: true, user: me.data.user }
+    if (me.data?.user) {
+      if (samePortalIdentity(me.data.user, portalUser)) {
+        return { ok: true, user: me.data.user }
+      }
+      try {
+        await axios.post(`${base}/logout`, {}, cfg)
+      } catch {
+        /* ignore logout failure; continue with explicit login/register flow */
+      }
+    }
   } catch (e) {
     if (e?.code === 'ERR_CANCELED') throw e
   }
