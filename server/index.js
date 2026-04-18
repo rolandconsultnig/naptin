@@ -16,6 +16,7 @@ import hrmsPerformanceRoutes from './routes/hrmsPerformance.js'
 import hrmsTrainingRoutes from './routes/hrmsTraining.js'
 import financeRoutes from './routes/finance.js'
 import procurementRoutes from './routes/procurement.js'
+import internalAuditRoutes from './routes/internalAudit.js'
 import ictRoutes from './routes/ict.js'
 import collaborationRoutes from './routes/collaboration.js'
 import whistleblowerRoutes from './routes/whistleblower.js'
@@ -28,6 +29,7 @@ const port = Number(process.env.API_PORT || 4002)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const uploadsDir = path.resolve(__dirname, '../uploads/intranet')
+const internalAuditSchemaPath = path.resolve(__dirname, './internal_audit_schema.sql')
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true })
@@ -72,11 +74,24 @@ app.use('/api/v1/hrms/performance', hrmsPerformanceRoutes)
 app.use('/api/v1/hrms/training', hrmsTrainingRoutes)
 app.use('/api/v1/finance', financeRoutes)
 app.use('/api/v1/procurement', procurementRoutes)
+app.use('/api/v1/internal-audit', internalAuditRoutes)
 app.use('/api/v1/ict', ictRoutes)
 app.use('/api/v1/collaboration', collaborationRoutes)
 app.use('/api/v1/whistleblower', whistleblowerRoutes)
 app.use('/api/v1/workflow', workflowRoutes)
 app.use('/api/v1/finance/cash-advances', cashAdvanceRoutes)
+
+if (fs.existsSync(internalAuditSchemaPath)) {
+  const schemaSql = fs.readFileSync(internalAuditSchemaPath, 'utf8')
+  if (schemaSql.trim()) {
+    try {
+      await pool.query(schemaSql)
+      console.log('Internal Audit schema ensured')
+    } catch (e) {
+      console.error('Failed to ensure Internal Audit schema:', e?.message || e)
+    }
+  }
+}
 
 app.use((err, _req, res, _next) => {
   console.error(err)
