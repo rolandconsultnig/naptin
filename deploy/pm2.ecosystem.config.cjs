@@ -49,6 +49,8 @@ module.exports = {
         FLASK_ENV: 'production',
         PYTHONUNBUFFERED: '1',
         OWL_TALK_PORT: '4003',
+        /* Repo ships dev/ssl/*.pem — without this, Owl listens HTTPS-only and http:// browsers get connection resets */
+        OWL_TALK_DISABLE_SSL: '1',
         ...(owlDb ? { OWL_TALK_DATABASE_URL: owlDb, DATABASE_URL: owlDb } : {}),
         ...(process.env.OWL_TALK_CORS_ORIGINS
           ? { OWL_TALK_CORS_ORIGINS: process.env.OWL_TALK_CORS_ORIGINS }

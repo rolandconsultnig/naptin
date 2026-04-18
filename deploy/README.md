@@ -415,6 +415,10 @@ If browsers hit **`http://SERVER:4001`** (vite preview) and **`http://SERVER:400
 
 ## 10. Troubleshooting
 
+### `curl http://127.0.0.1:4003/health` → **Connection reset by peer**
+
+The repo includes **`dev/ssl/cert.pem`** + **`key.pem`**. With those files present, Owl starts **HTTPS-only** on 4003. Plain **`http://`** requests then fail (often “connection reset”). Use **`curl -vk https://127.0.0.1:4003/health`**, **or** set **`OWL_TALK_DISABLE_SSL=1`** so Owl serves **HTTP** (PM2 **`deploy/pm2.ecosystem.config.cjs`** sets this for **`naptin-chat`**), then **`pm2 restart naptin-chat`**.
+
 ### `GET http://SERVER:4003/... net::ERR_CONNECTION_REFUSED`
 
 Owl Talk is not accepting connections (or the port is blocked).

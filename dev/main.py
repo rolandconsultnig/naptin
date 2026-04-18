@@ -747,11 +747,13 @@ if __name__ == '__main__':
     flask_env = os.environ.get('FLASK_ENV', 'development').lower()
     debug_mode = flask_env != 'production'
 
-    # Check if SSL certificates exist
+    # HTTPS when dev/ssl/*.pem exist — unless OWL_TALK_DISABLE_SSL=1 (typical production: HTTP on 4003 behind Nginx).
     ssl_cert = os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')
     ssl_key = os.path.join(os.path.dirname(__file__), 'ssl', 'key.pem')
-    
-    if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+    disable_ssl = os.environ.get('OWL_TALK_DISABLE_SSL', '').strip().lower() in ('1', 'true', 'yes')
+    use_ssl = (not disable_ssl) and os.path.exists(ssl_cert) and os.path.exists(ssl_key)
+
+    if use_ssl:
         print("🦉 Starting Owl-talk Server...")
         print("🔐 HTTPS enabled - Calls will work!")
         print("🌐 Server will be available at: https://localhost:" + str(backend_port))
@@ -768,7 +770,10 @@ if __name__ == '__main__':
                     ssl_context=context, allow_unsafe_werkzeug=True)
     else:
         print("🦉 Starting Owl-talk Server...")
-        print("⚠️  HTTPS not configured - Using HTTP")
+        if disable_ssl and os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+            print("⚠️  HTTPS certs present but OWL_TALK_DISABLE_SSL=1 — Using HTTP")
+        else:
+            print("⚠️  HTTPS not configured - Using HTTP")
         print("🌐 Server will be available at: http://localhost:" + str(backend_port))
         print("📱 WebSocket connections enabled")
         
