@@ -112,6 +112,18 @@ CREATE TABLE IF NOT EXISTS adm_user_permission_overrides (
   UNIQUE (user_id, permission_id)
 );
 
+-- Must run before materialized views that reference these columns (e.g. adm_mv_user_risk_snapshot).
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS reviewer_email TEXT;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS requested_by TEXT;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS requested_approver_email TEXT;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approved_by TEXT;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approver_note TEXT;
+
 CREATE TABLE IF NOT EXISTS adm_job_descriptions (
   id SERIAL PRIMARY KEY,
   job_code TEXT NOT NULL UNIQUE,
@@ -408,16 +420,6 @@ ALTER TABLE adm_users ADD COLUMN IF NOT EXISTS unit_id INT REFERENCES adm_depart
 ALTER TABLE adm_users ADD COLUMN IF NOT EXISTS job_title TEXT;
 ALTER TABLE adm_users ADD COLUMN IF NOT EXISTS job_summary TEXT;
 ALTER TABLE adm_users ADD COLUMN IF NOT EXISTS job_description_id INT REFERENCES adm_job_descriptions(id) ON DELETE SET NULL;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS reviewer_email TEXT;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved';
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS requested_by TEXT;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS requested_approver_email TEXT;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approved_by TEXT;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
-ALTER TABLE adm_user_permission_overrides ADD COLUMN IF NOT EXISTS approver_note TEXT;
 ALTER TABLE adm_audit_log ADD COLUMN IF NOT EXISTS prev_hash TEXT;
 ALTER TABLE adm_audit_log ADD COLUMN IF NOT EXISTS audit_hash TEXT;
 ALTER TABLE adm_query_perf_incidents ADD COLUMN IF NOT EXISTS owner_email TEXT;
