@@ -151,6 +151,8 @@ cd ..
 
 `deploy/pm2.ecosystem.config.cjs` uses **`dev/venv/bin/python`** for **`naptin-chat`**. Owl Talk reads **`DATABASE_URL`** (or **`OWL_TALK_DATABASE_URL`**) from `.env` via PM2.
 
+**Chat contract (avoid login / proxy 500s):** Use the same scheme end-to-end — **`http://` for `VITE_CHAT_*`** ↔ Owl on **HTTP** (`OWL_TALK_DISABLE_SSL=1`, recommended behind Nginx), or **`https://`** ↔ Owl on **HTTPS** (no disable, or terminate TLS at Nginx only). **`OWL_PORTAL_SYNC=1`** enables `POST /api/portal-sync` when portal users already exist with `naptin-*` passwords. **`OWL_TALK_CORS_ORIGINS`** must list any portal origin that is not covered by the built-in regexes (e.g. `https://portal.example.com` without `:4001`). See **`deploy/env.production.example`**.
+
 ### Step 6 — Start web + API + chat with PM2
 
 ```bash
@@ -182,10 +184,10 @@ You should see JSON with `"ok": true` if the database connection works.
 Check Owl Talk (from the server):
 
 ```bash
-curl -sS http://127.0.0.1:4003/health
+curl -sS http://127.0.0.1:4003/health || curl -sk https://127.0.0.1:4003/health
 ```
 
-You should see JSON like `"status": "healthy"`. If **`naptin-chat`** crashes, run `pm2 logs naptin-chat --lines 80` (often missing `venv` or `pip install`).
+You should see JSON like `"status": "healthy"`. If HTTP fails with “connection reset” but **`curl -sk https://127.0.0.1:4003/health`** works, Owl is **HTTPS-only** — set **`OWL_TALK_DISABLE_SSL=1`** in `.env` and **`pm2 restart naptin-chat --update-env`**, or point Nginx/`VITE_CHAT_*` at **https** for 4003. If **`naptin-chat`** crashes, run `pm2 logs naptin-chat --lines 80` (often missing `venv` or `pip install`).
 
 ### Step 7 — Configure Nginx
 
@@ -428,7 +430,11 @@ Then refresh the portal. Uses the same passwords as the SPA auto-login (`naptin-
 
 ### `curl http://127.0.0.1:4003/health` → **Connection reset by peer**
 
-The repo includes **`dev/ssl/cert.pem`** + **`key.pem`**. With those files present, Owl starts **HTTPS-only** on 4003. Plain **`http://`** requests then fail (often “connection reset”). Use **`curl -vk https://127.0.0.1:4003/health`**, **or** set **`OWL_TALK_DISABLE_SSL=1`** so Owl serves **HTTP** (PM2 **`deploy/pm2.ecosystem.config.cjs`** sets this for **`naptin-chat`**), then **`pm2 restart naptin-chat`**.
+The repo includes **`dev/ssl/cert.pem`** + **`key.pem`**. With those files present, Owl starts **HTTPS-only** on 4003. Plain **`http://`** requests then fail (often “connection reset”). Use **`curl -vk https://127.0.0.1:4003/health`**, **or** set **`OWL_TALK_DISABLE_SSL=1`** so Owl serves **HTTP** (PM2 **`deploy/pm2.ecosystem.config.cjs`** defaults this; override via `.env`), then **`pm2 restart naptin-chat --update-env`**.
+
+### Vite dev: `/proxy-chat-api/*` returns **500**
+
+The dev server proxies to **`http://127.0.0.1:4003`** unless **`VITE_CHAT_BACKEND_PROTOCOL=https`**. If Owl is HTTPS-only, the proxy fails → **500**. Fix: run Owl with **`OWL_TALK_DISABLE_SSL=1`**, **or** set **`VITE_CHAT_BACKEND_PROTOCOL=https`** in repo-root `.env` and restart **`npm run dev`**.
 
 ### `GET http://SERVER:4003/... net::ERR_CONNECTION_REFUSED`
 

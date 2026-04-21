@@ -17,15 +17,20 @@ const LINKS_POLICY = [
   { to: '/admin/modules', end: false, label: 'Modules', icon: LayoutGrid },
   { to: '/admin/roles', end: false, label: 'Roles', icon: UserCog },
   { to: '/admin/access', end: false, label: 'Access matrix', icon: Shield },
-  { to: '/admin/users', end: false, label: 'Users', icon: Users },
   { to: '/admin/audit', end: false, label: 'Audit log', icon: ScrollText },
+]
+
+const LINKS_SUPER_ADMIN = [
+  { to: '/admin/users/dashboard', end: false, label: 'User dashboard', icon: Shield },
+  { to: '/admin/users', end: false, label: 'Users', icon: Users },
 ]
 
 export default function AdminStandaloneLayout() {
   const { user, logout, roleKey } = useAuth()
   const navigate = useNavigate()
   const [mobileNav, setMobileNav] = useState(false)
-  const canEditPolicy = ['director', 'ict_admin'].includes(roleKey)
+  const isSuperAdminL5 = roleKey === 'super_admin' && Number(user?.roleLevel || 0) >= 5
+  const canEditPolicy = ['director', 'ict_admin'].includes(roleKey) || isSuperAdminL5
 
   const NavInner = () => (
     <>
@@ -50,6 +55,22 @@ export default function AdminStandaloneLayout() {
         <>
           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-3 mb-2 mt-5">Platform control</p>
           {LINKS_POLICY.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={() => setMobileNav(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  isActive ? 'bg-[#006838] text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`
+              }
+            >
+              <item.icon size={16} className="flex-shrink-0 opacity-90" />
+              {item.label}
+            </NavLink>
+          ))}
+          {isSuperAdminL5 && LINKS_SUPER_ADMIN.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -7,10 +7,11 @@ import {
 } from 'lucide-react'
 
 export default function AdminOverviewPage() {
-  const { roleKey } = useAuth()
+  const { roleKey, user } = useAuth()
   const location = useLocation()
   const policy = loadPolicy()
-  const canEdit = ['director', 'ict_admin'].includes(roleKey)
+  const isSuperAdminL5 = roleKey === 'super_admin' && Number(user?.roleLevel || 0) >= 5
+  const canEdit = ['director', 'ict_admin'].includes(roleKey) || isSuperAdminL5
 
   return (
     <div className="animate-fade-up max-w-5xl">
@@ -33,7 +34,7 @@ export default function AdminOverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           { label: 'Modules', value: String(PORTAL_MODULES.length), sub: 'in staff portal', icon: LayoutGrid, color: 'text-[#006838]', bg: 'bg-green-50' },
-          { label: 'Roles', value: '5', sub: 'RBAC keys', icon: Shield, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Roles', value: '6', sub: 'RBAC keys', icon: Shield, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Your role', value: roleKey || '—', sub: 'this session', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Operations', value: 'RTC + fleet', sub: 'estates', icon: Building2, color: 'text-amber-600', bg: 'bg-amber-50' },
         ].map((k, i) => (
@@ -105,6 +106,21 @@ export default function AdminOverviewPage() {
               </div>
               <ArrowRight size={18} className="text-slate-300 group-hover:text-[#006838] flex-shrink-0" />
             </Link>
+            {isSuperAdminL5 && (
+              <Link
+                to="/admin/users/dashboard"
+                className="card flex items-center gap-4 hover:border-[#006838]/40 hover:shadow-md transition-all group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 group-hover:bg-[#006838]/10 group-hover:text-[#006838]">
+                  <Shield size={22} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-900">Enterprise user dashboard</p>
+                  <p className="text-xs text-slate-500">Access exceptions, SoD risks, and stale override reporting</p>
+                </div>
+                <ArrowRight size={18} className="text-slate-300 group-hover:text-[#006838] flex-shrink-0" />
+              </Link>
+            )}
             <Link
               to="/admin/audit"
               className="card flex items-center gap-4 hover:border-[#006838]/40 hover:shadow-md transition-all group"

@@ -28,6 +28,7 @@ import AdminModulesPage from './pages/AdminModulesPage'
 import AdminPermissionsPage from './pages/AdminPermissionsPage'
 import AdminRolesPage from './pages/AdminRolesPage'
 import AdminUsersPage from './pages/AdminUsersPage'
+import AdminEnterpriseUserDashboardPage from './pages/AdminEnterpriseUserDashboardPage'
 import AdminAuditPage from './pages/AdminAuditPage'
 import AdminBrandAssetsPage from './pages/AdminBrandAssetsPage'
 import AdminBrandCompliancePage from './pages/AdminBrandCompliancePage'
@@ -62,6 +63,7 @@ import DocumentCenterPage from './pages/DocumentCenterPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import AdminHostGuard from './auth/AdminHostGuard'
 import RequireAdminConsoleRole from './auth/RequireAdminConsoleRole'
+import RequireSuperAdminLevel5 from './auth/RequireSuperAdminLevel5'
 import AdminStandaloneLayout from './components/layout/AdminStandaloneLayout'
 import HumanResourceLayout, { HumanResourceHomeRedirect } from './components/layout/HumanResourceLayout'
 
@@ -130,11 +132,19 @@ function AppRoutes() {
           }
         />
         <Route
+          path="users/dashboard"
+          element={
+            <RequireSuperAdminLevel5>
+              <AdminEnterpriseUserDashboardPage />
+            </RequireSuperAdminLevel5>
+          }
+        />
+        <Route
           path="users"
           element={
-            <RequirePolicyEditor>
+            <RequireSuperAdminLevel5>
               <AdminUsersPage />
-            </RequirePolicyEditor>
+            </RequireSuperAdminLevel5>
           }
         />
         <Route

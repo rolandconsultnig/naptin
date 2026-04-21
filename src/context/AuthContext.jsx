@@ -70,6 +70,7 @@ const base = (overrides) => ({
   profilePicture: null,
   /** Numeric id for integrated Owl Talk / dev chat when backend expects integer user ids */
   chatUserId: 900001,
+  roleLevel: 1,
   ...overrides,
 })
 
@@ -146,6 +147,23 @@ const DEMO_USERS = {
       staffId: 'NPN/HQ/2020/0156',
       grade: 'GL-12',
       chatUserId: 900005,
+      roleLevel: 3,
+    }),
+  },
+  'superadmin@naptin.gov.ng': {
+    roleKey: 'super_admin',
+    tenantId: 'naptin-hq',
+    user: base({
+      username: 'chief.admin',
+      email: 'superadmin@naptin.gov.ng',
+      name: 'Platform Super Administrator',
+      initials: 'SA',
+      role: 'Super Administrator',
+      department: 'ICT',
+      staffId: 'NPN/HQ/2013/0001',
+      grade: 'GL-17',
+      chatUserId: 900006,
+      roleLevel: 5,
     }),
   },
   'a.okonkwo@naptin.gov.ng': {

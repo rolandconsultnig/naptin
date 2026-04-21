@@ -208,7 +208,8 @@ export default function LoginPage() {
               hod@naptin.gov.ng — HOD<br/>
               director@naptin.gov.ng — director<br/>
               ict@naptin.gov.ng — ICT admin<br/>
-              audit@naptin.gov.ng — auditor
+              audit@naptin.gov.ng — auditor<br/>
+              superadmin@naptin.gov.ng — super admin (level 5)
             </div>
           </div>
         </div>

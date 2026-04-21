@@ -1,8 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-/** Only director, ICT admin, and level-5 super admin may edit policy. */
-export default function RequirePolicyEditor({ children }) {
+export default function RequireSuperAdminLevel5({ children }) {
   const { roleKey, user, bootstrapped } = useAuth()
   const location = useLocation()
 
@@ -12,8 +11,7 @@ export default function RequirePolicyEditor({ children }) {
     )
   }
 
-  const isSuperAdminL5 = roleKey === 'super_admin' && Number(user?.roleLevel || 0) >= 5
-  if (!['director', 'ict_admin'].includes(roleKey) && !isSuperAdminL5) {
+  if (roleKey !== 'super_admin' || Number(user?.roleLevel || 0) < 5) {
     return <Navigate to="/admin" replace state={{ policyDenied: true, from: location.pathname }} />
   }
 

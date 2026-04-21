@@ -41,7 +41,7 @@ export const WORKSPACE_SEGMENTS = new Set([
 export const PLATFORM_SEGMENTS = new Set(['integrations', 'security'])
 
 export function bypassesDepartmentScope(roleKey) {
-  return roleKey === 'director' || roleKey === 'ict_admin'
+  return roleKey === 'director' || roleKey === 'ict_admin' || roleKey === 'super_admin'
 }
 
 /** HR-only tabs inside Human Resources (directory, people, operations, enterprise). */

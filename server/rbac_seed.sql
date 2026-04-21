@@ -9,6 +9,101 @@ VALUES
   ('SERVICOM', 'SERVICOM')
 ON CONFLICT (code) DO NOTHING;
 
+INSERT INTO adm_risk_policy (
+  policy_code,
+  stale_override_days,
+  weight_sod_conflict,
+  weight_stale_override,
+  weight_missing_reason,
+  weight_override_count,
+  inactivity_days_high_privilege,
+  updated_by
+)
+VALUES ('DEFAULT', 90, 5, 3, 2, 1, 60, 'seed')
+ON CONFLICT (policy_code) DO NOTHING;
+
+INSERT INTO adm_report_schedules (
+  schedule_code,
+  report_type,
+  frequency,
+  status,
+  config,
+  recipients,
+  next_run_at,
+  created_by
+)
+VALUES
+  (
+    'WEEKLY_ACCESS_REVIEW',
+    'access_review_summary',
+    'weekly',
+    'active',
+    '{"staleDays":90,"includeSections":["kpis","urgentItems","reviewHistory"]}'::jsonb,
+    '["superadmin@naptin.gov.ng","ict@naptin.gov.ng"]'::jsonb,
+    NOW() + INTERVAL '7 days',
+    'seed'
+  ),
+  (
+    'MONTHLY_SOD_EXPOSURE',
+    'sod_exposure',
+    'monthly',
+    'active',
+    '{"severity":["critical","high"]}'::jsonb,
+    '["superadmin@naptin.gov.ng"]'::jsonb,
+    NOW() + INTERVAL '30 days',
+    'seed'
+  )
+ON CONFLICT (schedule_code) DO NOTHING;
+
+INSERT INTO adm_report_schedules (
+  schedule_code,
+  report_type,
+  frequency,
+  status,
+  config,
+  recipients,
+  next_run_at,
+  created_by
+)
+VALUES
+  (
+    'DAILY_REVIEW_REMINDERS',
+    'review_reminder_batch',
+    'daily',
+    'active',
+    '{"hoursAhead":24,"includeOverdue":true}'::jsonb,
+    '["superadmin@naptin.gov.ng"]'::jsonb,
+    NOW() + INTERVAL '1 day',
+    'seed'
+  ),
+  (
+    'HOURLY_DELIVERY_RETRY',
+    'delivery_retry_batch',
+    'hourly',
+    'active',
+    '{"type":"delivery-retry"}'::jsonb,
+    '["superadmin@naptin.gov.ng"]'::jsonb,
+    NOW() + INTERVAL '1 hour',
+    'seed'
+  )
+ON CONFLICT (schedule_code) DO NOTHING;
+
+INSERT INTO adm_department_units (department_id, code, name)
+SELECT d.id, x.code, x.name
+FROM (
+  VALUES
+    ('DG_OFFICE', 'DG_CORE', 'Executive Coordination Unit'),
+    ('FINANCE', 'FIN_BUDGET', 'Budget Planning Unit'),
+    ('FINANCE', 'FIN_PAYROLL', 'Payroll & Compensation Unit'),
+    ('PROCUREMENT', 'PROC_SOURCE', 'Strategic Sourcing Unit'),
+    ('ICT', 'ICT_INFRA', 'Infrastructure Unit'),
+    ('ICT', 'ICT_APPS', 'Applications & Platform Unit'),
+    ('HR', 'HR_RECRUIT', 'Talent Acquisition Unit'),
+    ('SERVICOM', 'SERVI_QUALITY', 'Service Quality Unit')
+) AS x(dept_code, code, name)
+JOIN adm_departments d ON d.code = x.dept_code
+ON CONFLICT (code) DO NOTHING;
+
 INSERT INTO adm_roles (role_code, role_name, description, department_id, role_level, status)
 SELECT
   x.role_code,
@@ -19,6 +114,7 @@ SELECT
   'active'
 FROM (
   VALUES
+    ('SUPER_ADMIN_L5', 'Super Administrator (Level 5)', 'Full platform governance and user access administration', 'ICT', 5),
     ('DG', 'Director General', 'Executive final approver', 'DG_OFFICE', 9),
     ('FIN_DIR', 'Director of Finance', 'Finance executive oversight', 'FINANCE', 8),
     ('FIN_MGR', 'Finance Manager', 'Finance approvals and controls', 'FINANCE', 6),
@@ -77,10 +173,27 @@ VALUES
   ('WF_TASK_CLAIM', 'WF', 'TASK', 'CLAIM', 'Claim workflow task'),
   ('WF_TASK_COMPLETE', 'WF', 'TASK', 'COMPLETE', 'Complete workflow task'),
   ('WF_PROCESS_DESIGN', 'WF', 'PROCESS', 'DESIGN', 'Design workflow process'),
+  ('ADMIN_USER_MANAGE', 'PROFILE', 'USER_ADMIN', 'MANAGE', 'Manage enterprise users and hierarchy'),
+  ('ADMIN_PERMISSION_OVERRIDE', 'PROFILE', 'USER_ADMIN', 'PERMISSION_OVERRIDE', 'Set per-user permission overrides'),
+  ('ADMIN_JOB_DESCRIPTION_MANAGE', 'PROFILE', 'JOB_DESCRIPTION', 'MANAGE', 'Create and update job descriptions'),
   ('PROFILE_VIEW_OWN', 'PROFILE', 'PROFILE', 'VIEW_OWN', 'View own profile'),
   ('PROFILE_UPDATE_OWN', 'PROFILE', 'PROFILE', 'UPDATE_OWN', 'Update own profile'),
   ('NOTIFICATION_READ', 'PROFILE', 'NOTIFICATION', 'READ', 'Read notifications')
 ON CONFLICT (permission_code) DO NOTHING;
+
+INSERT INTO adm_module_features (module_id, feature_code, feature_name, status)
+SELECT
+  m.id AS module_id,
+  p.feature_code,
+  INITCAP(REPLACE(LOWER(p.feature_code), '_', ' ')) AS feature_name,
+  'active'
+FROM (
+  SELECT DISTINCT module_code, feature_code
+  FROM adm_permissions
+  WHERE feature_code IS NOT NULL
+) p
+JOIN adm_modules m ON m.module_code = p.module_code
+ON CONFLICT (module_id, feature_code) DO NOTHING;
 
 INSERT INTO adm_role_permissions (role_id, permission_id, granted)
 SELECT r.id, p.id, TRUE
@@ -119,6 +232,63 @@ JOIN adm_permissions p ON p.permission_code IN (
 )
 WHERE r.role_code = 'PROC_MGR'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+INSERT INTO adm_role_permissions (role_id, permission_id, granted)
+SELECT r.id, p.id, TRUE
+FROM adm_roles r
+JOIN adm_permissions p ON p.permission_code IN (
+  'ADMIN_USER_MANAGE',
+  'ADMIN_PERMISSION_OVERRIDE',
+  'ADMIN_JOB_DESCRIPTION_MANAGE'
+)
+WHERE r.role_code = 'SUPER_ADMIN_L5'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+INSERT INTO adm_job_descriptions (
+  job_code, title, department_id, unit_id, summary, responsibilities, requirements, status
+)
+SELECT
+  x.job_code,
+  x.title,
+  d.id,
+  u.id,
+  x.summary,
+  x.responsibilities,
+  x.requirements,
+  'active'
+FROM (
+  VALUES
+    (
+      'ICT_PLAT_ADMIN',
+      'Platform Access Administrator',
+      'ICT',
+      'ICT_APPS',
+      'Owns enterprise identity lifecycle and access provisioning.',
+      'Define and maintain role assignments, grant exceptions for approved access requests, and run access recertification audits each quarter.',
+      'Minimum 7 years in enterprise IAM, strong understanding of RBAC/SoD controls, and proven incident response ownership.'
+    ),
+    (
+      'HR_TALENT_LEAD',
+      'Talent Acquisition Lead',
+      'HR',
+      'HR_RECRUIT',
+      'Leads end-to-end recruitment planning and workforce demand tracking.',
+      'Coordinate hiring plans with business units, review role competency requirements, and ensure onboarding documentation is complete.',
+      'Minimum 5 years in HR operations, knowledge of competency frameworks, and strong stakeholder communication.'
+    ),
+    (
+      'FIN_PAYROLL_COORD',
+      'Payroll Coordination Officer',
+      'FINANCE',
+      'FIN_PAYROLL',
+      'Maintains compliant payroll data and monthly disbursement readiness.',
+      'Prepare payroll variance analysis, verify employee compensation records, and coordinate approvals before payment runs.',
+      'Minimum 4 years in payroll administration, spreadsheet proficiency, and familiarity with statutory deductions.'
+    )
+) AS x(job_code, title, dept_code, unit_code, summary, responsibilities, requirements)
+JOIN adm_departments d ON d.code = x.dept_code
+JOIN adm_department_units u ON u.code = x.unit_code
+ON CONFLICT (job_code) DO NOTHING;
 
 INSERT INTO adm_sod_rules (code, left_permission_id, right_permission_id, severity, description)
 SELECT

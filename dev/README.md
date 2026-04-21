@@ -33,6 +33,18 @@ A modern, enterprise-grade messaging application built with React, Flask, and So
 
 ## 🚀 Quick Start
 
+## ⚠️ Legacy Route Notice
+
+The legacy Owl-talk tenant routes are intentionally deprecated and return `410 Gone`:
+
+- `/api/admin/tenants`
+- `/api/admin/tenant-module-policy`
+- `/api/admin/tenant-module-policy/:segment`
+- `/api/admin/tenant-audit`
+- `/api/tenant-policy`
+
+These routes depended on retired legacy tenant tables. Use enterprise RBAC APIs (`/api/v1/admin/rbac/*`) for current multi-tenant governance and access control.
+
 ### Prerequisites
 - Python 3.8+
 - Node.js 18+

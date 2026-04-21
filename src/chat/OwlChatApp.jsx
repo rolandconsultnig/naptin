@@ -272,7 +272,7 @@ export function OwlChatApp() {
           setUsers(buildStaffChatList())
           toast(
             raw.length === 0
-              ? 'No other Owl Talk users in the database yet. On the server run: npm run owl:bootstrap-roster (then refresh). Showing directory preview.'
+              ? 'No other Owl Talk users in the database yet. From the repo root (where Owl Talk uses DATABASE_URL), run: npm run owl:bootstrap-roster — then refresh. Showing directory preview.'
               : 'Chat server returned no contacts after filtering — showing NAPTIN directory preview.',
             { icon: '👥', duration: 8000 }
           )

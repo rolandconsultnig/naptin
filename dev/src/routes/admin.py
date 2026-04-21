@@ -16,6 +16,15 @@ DEFAULT_TENANTS = [
     {'key': 'kaduna-campus', 'name': 'Kaduna Campus'},
 ]
 
+LEGACY_TENANT_ROUTES_REMOVED = {
+    'error': 'Legacy tenant routes removed',
+    'reason': (
+        'Legacy Owl-talk tenant tables/routes were retired during enterprise RBAC cleanup. '
+        'Use enterprise admin RBAC APIs instead.'
+    ),
+    'replacement': '/api/v1/admin/rbac/*',
+}
+
 def require_admin():
     """Check if user is admin"""
     if 'user_id' not in session:
@@ -78,130 +87,22 @@ def write_tenant_audit(tenant_id, actor_user_id, action, detail):
 
 @admin_bp.route('/admin/tenants', methods=['GET'])
 def list_tenants():
-    admin_user = require_admin()
-    if not admin_user:
-        return jsonify({'error': 'Admin access required'}), 403
-
-    try:
-        ensure_default_tenants()
-        tenants = Tenant.query.filter(Tenant.is_active == True).order_by(Tenant.id.asc()).all()
-        return jsonify({'items': [t.to_dict() for t in tenants]})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify(LEGACY_TENANT_ROUTES_REMOVED), 410
 
 
 @admin_bp.route('/admin/tenant-module-policy', methods=['GET'])
 def get_tenant_module_policy():
-    admin_user = require_admin()
-    if not admin_user:
-        return jsonify({'error': 'Admin access required'}), 403
-
-    try:
-        ensure_default_tenants()
-        tenant = get_tenant_from_request()
-        if not tenant:
-            return jsonify({'error': 'Tenant not found'}), 404
-
-        ensure_membership(tenant, admin_user)
-
-        rows = TenantModulePolicy.query.filter_by(tenant_id=tenant.id).all()
-        by_segment = {r.segment: r for r in rows}
-
-        items = []
-        for segment in PORTAL_SEGMENTS:
-            row = by_segment.get(segment)
-            items.append({
-                'segment': segment,
-                'is_enabled': True if not row else bool(row.is_enabled),
-                'updated_at': row.updated_at.isoformat() if row and row.updated_at else None,
-            })
-
-        return jsonify({
-            'tenant': tenant.to_dict(),
-            'items': items,
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify(LEGACY_TENANT_ROUTES_REMOVED), 410
 
 
 @admin_bp.route('/admin/tenant-module-policy/<string:segment>', methods=['PUT'])
 def update_tenant_module_policy(segment):
-    admin_user = require_admin()
-    if not admin_user:
-        return jsonify({'error': 'Admin access required'}), 403
-
-    if segment not in PORTAL_SEGMENTS:
-        return jsonify({'error': 'Invalid segment'}), 400
-
-    try:
-        ensure_default_tenants()
-        tenant = get_tenant_from_request()
-        if not tenant:
-            return jsonify({'error': 'Tenant not found'}), 404
-
-        ensure_membership(tenant, admin_user)
-
-        data = request.get_json(silent=True) or {}
-        if 'is_enabled' not in data:
-            return jsonify({'error': 'is_enabled is required'}), 400
-
-        is_enabled = bool(data.get('is_enabled'))
-
-        row = TenantModulePolicy.query.filter_by(tenant_id=tenant.id, segment=segment).first()
-        if not row:
-            row = TenantModulePolicy(
-                tenant_id=tenant.id,
-                segment=segment,
-                is_enabled=is_enabled,
-                updated_by=admin_user.id,
-            )
-            db.session.add(row)
-        else:
-            row.is_enabled = is_enabled
-            row.updated_by = admin_user.id
-            row.updated_at = datetime.utcnow()
-
-        db.session.commit()
-
-        write_tenant_audit(
-            tenant_id=tenant.id,
-            actor_user_id=admin_user.id,
-            action='module.enable' if is_enabled else 'module.disable',
-            detail=f"Segment '{segment}' {'enabled' if is_enabled else 'disabled'}",
-        )
-
-        return jsonify({
-            'message': 'Tenant module policy updated',
-            'tenant': tenant.to_dict(),
-            'item': row.to_dict(),
-        })
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+    return jsonify(LEGACY_TENANT_ROUTES_REMOVED), 410
 
 
 @admin_bp.route('/admin/tenant-audit', methods=['GET'])
 def get_tenant_audit():
-    admin_user = require_admin()
-    if not admin_user:
-        return jsonify({'error': 'Admin access required'}), 403
-
-    try:
-        ensure_default_tenants()
-        tenant = get_tenant_from_request()
-        if not tenant:
-            return jsonify({'error': 'Tenant not found'}), 404
-
-        limit = request.args.get('limit', 100, type=int)
-        limit = max(1, min(limit, 500))
-
-        events = TenantAuditEvent.query.filter_by(tenant_id=tenant.id).order_by(TenantAuditEvent.created_at.desc()).limit(limit).all()
-        return jsonify({
-            'tenant': tenant.to_dict(),
-            'items': [e.to_dict() for e in events],
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify(LEGACY_TENANT_ROUTES_REMOVED), 410
 
 @admin_bp.route('/admin/stats', methods=['GET'])
 def get_admin_stats():

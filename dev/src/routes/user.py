@@ -4,7 +4,6 @@ from datetime import datetime
 import os
 import time
 from werkzeug.utils import secure_filename
-from src.utils.tenant_access import resolve_user_tenant, get_tenant_policy_items
 
 user_bp = Blueprint('user', __name__)
 
@@ -124,18 +123,14 @@ def get_me():
 
 @user_bp.route('/tenant-policy', methods=['GET'])
 def get_current_user_tenant_policy():
-    user = require_auth()
-    if not user:
-        return jsonify({'error': 'Not authenticated'}), 401
-
-    tenant = resolve_user_tenant(user.id)
-    if not tenant:
-        return jsonify({'error': 'Tenant not found'}), 404
-
     return jsonify({
-        'tenant': tenant.to_dict(),
-        'items': get_tenant_policy_items(tenant.id),
-    })
+        'error': 'Legacy tenant policy endpoint removed',
+        'reason': (
+            'Legacy Owl-talk tenant policy tables/routes were retired during enterprise RBAC cleanup. '
+            'Use enterprise RBAC APIs instead.'
+        ),
+        'replacement': '/api/v1/admin/rbac/*',
+    }), 410
 
 @user_bp.route('/users', methods=['GET'])
 def get_users():

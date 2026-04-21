@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 
 const NotificationContext = createContext(null)
 
 const STORAGE_KEY = 'naptin_notifications'
 const MAX_STORED = 60
+const GOVERNANCE_SYNC_MS = 45_000
 
 /** Generates a human-readable relative time string from an epoch ms timestamp */
 export function relativeTime(ts) {
@@ -120,10 +121,54 @@ function saveToStorage(notifications) {
   }
 }
 
+function mapServerSeverityToType(severity = '') {
+  const s = String(severity || '').toLowerCase()
+  if (s === 'error') return 'error'
+  if (s === 'warning') return 'warning'
+  if (s === 'success') return 'success'
+  return 'info'
+}
+
+async function fetchGovernanceNotifications() {
+  let session = null
+  try {
+    session = JSON.parse(localStorage.getItem('naptin_portal_session') || 'null')
+  } catch {
+    session = null
+  }
+  const roleKey = String(session?.roleKey || '').toLowerCase()
+  const roleLevel = Number(session?.user?.roleLevel || 0)
+  const userEmail = String(session?.user?.email || '').trim()
+  if (roleKey !== 'super_admin' || roleLevel < 5 || !userEmail) return []
+
+  const res = await fetch('/api/v1/admin/rbac/notifications/events?scope=mine&channel=in_app&limit=30', {
+    credentials: 'include',
+    headers: {
+      'x-role-key': roleKey,
+      'x-role-level': String(roleLevel),
+      'x-user-email': userEmail,
+    },
+  })
+  if (!res.ok) return []
+  const payload = await res.json()
+  const rows = Array.isArray(payload?.items) ? payload.items : []
+  return rows.map((row) => ({
+    id: `srv-${row.id}`,
+    title: row.title || row.event_code || 'Governance event',
+    sub: row.body || '',
+    ts: Date.parse(row.created_at || '') || Date.now(),
+    type: mapServerSeverityToType(row.severity),
+    read: false,
+    link: '/admin/users/dashboard',
+    module: row.channel === 'in_app' ? 'Enterprise Governance' : String(row.channel || '').toUpperCase(),
+  }))
+}
+
 export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState(() => {
     return loadFromStorage() || seedNotifications()
   })
+  const syncedEventIdsRef = useRef(new Set())
 
   // Persist on every change
   useEffect(() => {
@@ -158,6 +203,42 @@ export function NotificationProvider({ children }) {
 
   const clearAll = useCallback(() => {
     setNotifications([])
+  }, [])
+
+  useEffect(() => {
+    syncedEventIdsRef.current = new Set(
+      notifications.map((n) => String(n.id || '')).filter((id) => id.startsWith('srv-'))
+    )
+  }, [notifications])
+
+  useEffect(() => {
+    let disposed = false
+    const sync = async () => {
+      try {
+        const incoming = await fetchGovernanceNotifications()
+        if (disposed || !incoming.length) return
+        setNotifications((prev) => {
+          const next = [...prev]
+          const seen = new Set(next.map((n) => String(n.id || '')))
+          for (const item of incoming) {
+            if (seen.has(item.id) || syncedEventIdsRef.current.has(item.id)) continue
+            next.unshift(item)
+            seen.add(item.id)
+            syncedEventIdsRef.current.add(item.id)
+          }
+          return next.slice(0, MAX_STORED)
+        })
+      } catch {
+        // best-effort polling; keep local notifications functional
+      }
+    }
+
+    sync()
+    const id = window.setInterval(sync, GOVERNANCE_SYNC_MS)
+    return () => {
+      disposed = true
+      window.clearInterval(id)
+    }
   }, [])
 
   const value = useMemo(() => ({

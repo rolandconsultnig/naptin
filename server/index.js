@@ -100,7 +100,47 @@ app.use((err, _req, res, _next) => {
   })
 })
 
+const automationEnabled = String(process.env.ACCESS_GOVERNANCE_AUTOMATION_ENABLED ?? 'true').toLowerCase() !== 'false'
+const automationIntervalMs = Math.max(60_000, Number(process.env.ACCESS_GOVERNANCE_AUTOMATION_INTERVAL_MS || 300_000))
+let automationInFlight = false
+
+async function runGovernanceAutomationTick() {
+  if (!automationEnabled || automationInFlight) return
+  automationInFlight = true
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/rbac/maintenance/run-automation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-role-key': 'super_admin',
+        'x-role-level': '5',
+        'x-user-email': process.env.ACCESS_GOVERNANCE_AUTOMATION_ACTOR || 'system@naptin.gov.ng',
+      },
+      body: JSON.stringify({}),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      console.error('Governance automation tick failed:', response.status, text)
+    }
+  } catch (error) {
+    console.error('Governance automation tick error:', error?.message || error)
+  } finally {
+    automationInFlight = false
+  }
+}
+
 app.listen(port, () => {
   console.log(`NAPTIN API listening on http://localhost:${port}`)
+  if (automationEnabled) {
+    setTimeout(() => {
+      runGovernanceAutomationTick().catch(() => {})
+    }, 10_000)
+    setInterval(() => {
+      runGovernanceAutomationTick().catch(() => {})
+    }, automationIntervalMs)
+    console.log(`Governance automation enabled (interval ${automationIntervalMs}ms)`)
+  } else {
+    console.log('Governance automation disabled by ACCESS_GOVERNANCE_AUTOMATION_ENABLED')
+  }
 })
 

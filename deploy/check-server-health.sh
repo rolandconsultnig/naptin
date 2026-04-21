@@ -17,16 +17,27 @@ else
   netstat -tlnp 2>/dev/null | grep -E ':400[123]' || echo "(install iproute2 or net-tools)"
 fi
 
-echo "== Local HTTP =="
-for url in \
-  'http://127.0.0.1:4002/api/v1/health' \
-  'http://127.0.0.1:4003/health'
-do
-  code=$(curl -sS -o /tmp/naptin_chk_body -w '%{http_code}' "$url" || echo "ERR")
-  echo "  $url -> HTTP $code"
-  head -c 120 /tmp/naptin_chk_body 2>/dev/null | tr '\n' ' '
+echo "== Local HTTP (Node API) =="
+code=$(curl -sS -o /tmp/naptin_chk_body -w '%{http_code}' 'http://127.0.0.1:4002/api/v1/health' || echo "ERR")
+echo "  http://127.0.0.1:4002/api/v1/health -> HTTP $code"
+head -c 120 /tmp/naptin_chk_body 2>/dev/null | tr '\n' ' '
+echo
+
+echo "== Owl /health (HTTPS fallback if HTTP is not JSON) =="
+owl_http=/tmp/naptin_owl_health_http
+code=$(curl -sS -o "$owl_http" -w '%{http_code}' 'http://127.0.0.1:4003/health' || echo "ERR")
+echo "  http://127.0.0.1:4003/health -> HTTP $code"
+head -c 120 "$owl_http" 2>/dev/null | tr '\n' ' '
+echo
+first=$(head -c 1 "$owl_http" 2>/dev/null || true)
+if [ "$first" != "{" ]; then
+  code=$(curl -sk -o "$owl_http" -w '%{http_code}' 'https://127.0.0.1:4003/health' || echo "ERR")
+  echo "  https://127.0.0.1:4003/health -> HTTP $code (insecure TLS for local check only)"
+  head -c 120 "$owl_http" 2>/dev/null | tr '\n' ' '
   echo
-done
+  echo "  Tip: set OWL_TALK_DISABLE_SSL=1 in .env so Owl speaks HTTP on 4003 (see deploy/env.production.example)."
+fi
+rm -f "$owl_http"
 
 echo "== manifest.webmanifest (via 4001 if preview up) =="
 code=$(curl -sS -o /tmp/naptin_mf -w '%{http_code}' 'http://127.0.0.1:4001/manifest.webmanifest' || echo "ERR")

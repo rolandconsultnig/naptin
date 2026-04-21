@@ -4,7 +4,7 @@
  */
 
 /** Roles that may open the admin console */
-export const ADMIN_CONSOLE_ROLES = ['ict_admin', 'director', 'hod']
+export const ADMIN_CONSOLE_ROLES = ['ict_admin', 'director', 'hod', 'super_admin']
 
 const DEFAULT_HOSTS = ['127.0.0.1', 'localhost', '::1']
 

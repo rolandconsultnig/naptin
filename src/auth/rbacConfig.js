@@ -1,5 +1,5 @@
 /** Canonical role keys — keep in sync with AuthContext demo users. */
-export const ROLE_KEYS = ['staff', 'hod', 'director', 'ict_admin', 'auditor']
+export const ROLE_KEYS = ['staff', 'hod', 'director', 'ict_admin', 'auditor', 'super_admin']
 
 export const ALL_ROLES = [...ROLE_KEYS]
 
@@ -8,10 +8,10 @@ export const ALL_ROLES = [...ROLE_KEYS]
  * segment = first path segment under /app (e.g. finance -> /app/finance).
  */
 export const APP_ROUTE_RULES = [
-  { segment: 'security', roles: ['director', 'ict_admin', 'auditor'] },
-  { segment: 'integrations', roles: ['director', 'ict_admin'] },
-  { segment: 'documents', roles: ['hod', 'director', 'ict_admin', 'auditor'] },
-  { segment: 'process-maker', roles: ['ict_admin'] },
+  { segment: 'security', roles: ['director', 'ict_admin', 'auditor', 'super_admin'] },
+  { segment: 'integrations', roles: ['director', 'ict_admin', 'super_admin'] },
+  { segment: 'documents', roles: ['hod', 'director', 'ict_admin', 'auditor', 'super_admin'] },
+  { segment: 'process-maker', roles: ['ict_admin', 'super_admin'] },
 ]
 
 export function defaultAllowedRolesForSegment(segment) {
